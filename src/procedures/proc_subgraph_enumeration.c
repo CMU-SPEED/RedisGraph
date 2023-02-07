@@ -18,9 +18,12 @@
 // CALL algo.subgraphEnumeration()
 
 typedef struct {
-    uint64_t count;    // Current schema ID.
-    GraphContext *gc;  // Graph context.
-    SIValue *output;   // Output label.
+    uint64_t count;     // Current schema ID.
+    GraphContext *gc;   // Graph context.
+    uint64_t **output;  // Output label.
+    uint64_t output_size;
+    uint64_t query_size;
+    SIValue *formatted_output;
 } SubgraphEnumerationContext;
 
 ProcedureResult Proc_SubgraphEnumerationInvoke(ProcedureCtx *ctx,
@@ -33,12 +36,12 @@ ProcedureResult Proc_SubgraphEnumerationInvoke(ProcedureCtx *ctx,
 
     pdata->count = 0;
     pdata->gc = QueryCtx_GetGraphCtx();
-    pdata->output = array_new(SIValue, 1);
+    pdata->output = array_newlen(uint64_t *, 0);
+    pdata->output_size = 0;
+    pdata->formatted_output = array_new(SIValue, 1);
 
-    GrB_Matrix graph = pdata->gc->g->adjacency_matrix->matrix;
-
-    uint64_t **output = array_newlen(uint64_t *, 0);
-    uint64_t output_size = 0;
+    // 3-clique query plan
+    pdata->query_size = 3;
     uint64_t **plan = array_newlen(uint64_t *, 3);
     plan[0] = array_newlen(uint64_t, 0);
     plan[1] = array_newlen(uint64_t, 1);
@@ -47,16 +50,13 @@ ProcedureResult Proc_SubgraphEnumerationInvoke(ProcedureCtx *ctx,
     plan[2][0] = 1;
     plan[2][1] = 2;
 
-    printf("LEN | %d %d\n", array_len(output), array_len(plan));
-
-    enumerate_subgraph(&output, &output_size, plan, graph, 3);
-    printf("Output Size: %d\n", output_size);
+    enumerate_subgraph(&(pdata->output), &(pdata->output_size), plan,
+                       pdata->gc->g->adjacency_matrix->matrix, 3);
+    printf("Output Size: %d\n", pdata->output_size);
 
     // Free plan
     array_foreach(plan, e, array_free(e));
     array_free(plan);
-    array_foreach(output, e, array_free(e));
-    array_free(output);
 
     ctx->privateData = pdata;
 
@@ -70,32 +70,41 @@ SIValue *Proc_SubgraphEnumerationStep(ProcedureCtx *ctx) {
         (SubgraphEnumerationContext *)ctx->privateData;
 
     // depleted?
-    if (pdata->count >= 3) return NULL;
+    if (pdata->count >= pdata->output_size) return NULL;
+    // if (pdata->count >= 100) return NULL;
 
-    pdata->output[0] = SI_Array(3);
+#ifdef MATERIALIZED
+    pdata->formatted_output[0] = SI_Array(pdata->query_size);
 
-    Node n1 = GE_NEW_NODE();
-    Graph_GetNode(pdata->gc->g, pdata->count * 3 + 0, &n1);
-    SIArray_Append(&(pdata->output[0]), SI_Node(&n1));
-
-    Node n2 = GE_NEW_NODE();
-    Graph_GetNode(pdata->gc->g, pdata->count * 3 + 1, &n2);
-    SIArray_Append(&(pdata->output[0]), SI_Node(&n2));
-
-    Node n3 = GE_NEW_NODE();
-    Graph_GetNode(pdata->gc->g, pdata->count * 3 + 2, &n3);
-    SIArray_Append(&(pdata->output[0]), SI_Node(&n3));
+    for (uint64_t i = 0; i < pdata->query_size; i++) {
+        Node n = GE_NEW_NODE();
+        Graph_GetNode(pdata->gc->g, pdata->output[pdata->count][i], &n);
+        SIArray_Append(&(pdata->formatted_output[0]), SI_Node(&n));
+    }
 
     pdata->count += 1;
 
-    return pdata->output;
+    if (pdata->count % 100000 == 0) {
+        printf("%d\n", pdata->count);
+    }
+#else
+    pdata->formatted_output[0] = SI_Array(1);
+    SIArray_Append(&(pdata->formatted_output[0]), SI_LongVal(pdata->output_size));
+    pdata->count = pdata->output_size;
+#endif
+
+    return pdata->formatted_output;
 }
 
 ProcedureResult Proc_SubgraphEnumerationFree(ProcedureCtx *ctx) {
     // clean up
     if (ctx->privateData) {
         SubgraphEnumerationContext *pdata = ctx->privateData;
+
+        // Free output
+        array_foreach(pdata->output, e, array_free(e));
         array_free(pdata->output);
+
         rm_free(ctx->privateData);
     }
 
