@@ -9,7 +9,7 @@ endif()
 
 project(redisgraph)
 
-file(GLOB_RECURSE SOURCES "src/*.c")
+file(GLOB_RECURSE SOURCES "src/*.c" "src/*.cpp")
 
 if (NOT APPLE)
 	add_library(redisgraph SHARED ${SOURCES})

@@ -1,9 +1,13 @@
 #include <cassert>
+#include <vector>
 
-#include "gb_mxm_like.hpp"
+extern "C" {
+#include "../../deps/GraphBLAS/Include/GraphBLAS.h"
+}
 
-void gb_matrix_intersection(GrB_Matrix &C, GrB_Matrix M, GrB_Matrix B,
-                            GrB_Matrix A, std::vector<uint64_t> &v) {
+extern "C" void gb_matrix_intersection(GrB_Matrix &C, GrB_Matrix M,
+                                       GrB_Matrix B, GrB_Matrix A,
+                                       std::vector<uint64_t> &v) {
     GrB_Info info;
 
     uint64_t nrows, ncols;

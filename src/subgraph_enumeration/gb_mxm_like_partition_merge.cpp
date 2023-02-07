@@ -4,27 +4,21 @@
 #include <cstdint>
 #include <cstring>
 #include <deque>
+#include <iostream>
+#include <vector>
 
-#include "gb_mxm_like.hpp"
+extern "C" {
+#include "../../deps/GraphBLAS/Include/GraphBLAS.h"
+}
 
-#define START_TIMING                                                 \
-    start = std::chrono::duration_cast<std::chrono::microseconds>(   \
-                std::chrono::system_clock::now().time_since_epoch()) \
-                .count();
+extern "C" void mxm_like_partition_merge(std::vector<size_t> &IC, std::vector<size_t> &JC,
+                              std::vector<size_t> &IM, std::vector<size_t> &JM,
+                              std::vector<size_t> &IA, std::vector<size_t> &JA,
+                              std::vector<size_t> &IB,
+                              std::vector<size_t> &JB);
 
-#define STOP_TIMING                                                 \
-    stop = std::chrono::duration_cast<std::chrono::microseconds>(   \
-               std::chrono::system_clock::now().time_since_epoch()) \
-               .count();                                            \
-    oh += (stop - start);
-
-uint64_t gb_mxm_like_partition_merge(GrB_Matrix &C, GrB_Matrix &M,
-                                     GrB_Matrix &A, GrB_Matrix &B) {
-    uint64_t start, stop;
-    uint64_t oh = 0;
-
-    START_TIMING;
-
+extern "C" void gb_mxm_like_partition_merge(GrB_Matrix &C, GrB_Matrix &M,
+                                            GrB_Matrix &A, GrB_Matrix &B) {
     GrB_Info info;
 
     // ⭐️ Extract essential information
@@ -81,26 +75,24 @@ uint64_t gb_mxm_like_partition_merge(GrB_Matrix &C, GrB_Matrix &M,
                                     &VM_len, GrB_CSR_FORMAT, M);
     assert(info == GrB_SUCCESS);
 
-    std::vector<uint64_t> IA(IA_arr, IA_arr + (nrows_A + 1));
+    std::vector<size_t> IA(IA_arr, IA_arr + (nrows_A + 1));
     delete[] IA_arr;
-    std::vector<uint64_t> JA(JA_arr, JA_arr + nvals_A);
+    std::vector<size_t> JA(JA_arr, JA_arr + nvals_A);
     delete[] JA_arr;
-    std::vector<uint64_t> IB(IB_arr, IB_arr + (nrows_B + 1));
+    std::vector<size_t> IB(IB_arr, IB_arr + (nrows_B + 1));
     delete[] IB_arr;
-    std::vector<uint64_t> JB(JB_arr, JB_arr + nvals_B);
+    std::vector<size_t> JB(JB_arr, JB_arr + nvals_B);
     delete[] JB_arr;
-    std::vector<uint64_t> IM(IM_arr, IM_arr + (nrows_M + 1));
+    std::vector<size_t> IM(IM_arr, IM_arr + (nrows_M + 1));
     delete[] IM_arr;
-    std::vector<uint64_t> JM(JM_arr, JM_arr + nvals_M);
+    std::vector<size_t> JM(JM_arr, JM_arr + nvals_M);
     delete[] JM_arr;
-    std::vector<uint64_t> IC, JC;
-
-    STOP_TIMING;
+    std::vector<size_t> IC, JC;
 
     // Do mxm
-    multiple_vxm_like_v4_c_mt_partitioned_ptr(IC, JC, IM, JM, IB, JB, IA, JA);
+    mxm_like_partition_merge(IC, JC, IM, JM, IB, JB, IA, JA);
 
-    START_TIMING;
+    std::cout << std::endl << IC.size() << " " << JC.size() << std::endl;
 
     // If there is no data
     if (IC[nrows_C] == 0) {
@@ -117,7 +109,4 @@ uint64_t gb_mxm_like_partition_merge(GrB_Matrix &C, GrB_Matrix &M,
         delete[] VC_data;
     }
     assert(info == GrB_SUCCESS);
-
-    STOP_TIMING;
-    return oh;
 }

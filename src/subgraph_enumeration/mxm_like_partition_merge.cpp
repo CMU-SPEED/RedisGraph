@@ -1,27 +1,17 @@
 #include <omp.h>
 
-#include "mxm_like.hpp"
-#include "mxv_like.hpp"
+#include <chrono>
+#include <iostream>
+#include <vector>
 
-#define START_TIMING ;
-// start = std::chrono::duration_cast<std::chrono::microseconds>(   \
-    //             std::chrono::system_clock::now().time_since_epoch()) \
-    //             .count();
+extern "C" void mxv_like_v1(std::vector<size_t> &Ic, size_t *Im, size_t Im_size,
+                            size_t *IA, size_t IA_size, size_t *JA,
+                            size_t JA_size, size_t *Ib, size_t Ib_size);
 
-#define STOP_TIMING ;
-// stop = std::chrono::duration_cast<std::chrono::microseconds>(   \
-    //            std::chrono::system_clock::now().time_since_epoch()) \
-    //            .count();                                            \
-    // std::cout << "," << (stop - start) / 1000.0;
-
-void mxm_partition_merge(std::vector<size_t> &IC, std::vector<size_t> &JC,
-                         std::vector<size_t> &IM, std::vector<size_t> &JM,
-                         std::vector<size_t> &IA, std::vector<size_t> &JA,
-                         std::vector<size_t> &IB, std::vector<size_t> &JB) {
-    size_t start, stop;
-
-    START_TIMING;
-
+extern "C" void mxm_like_partition_merge(
+    std::vector<size_t> &IC, std::vector<size_t> &JC, std::vector<size_t> &IM,
+    std::vector<size_t> &JM, std::vector<size_t> &IA, std::vector<size_t> &JA,
+    std::vector<size_t> &IB, std::vector<size_t> &JB) {
     size_t num_threads = omp_get_max_threads();
 
     size_t *IM_arr = IM.data();
@@ -33,6 +23,8 @@ void mxm_partition_merge(std::vector<size_t> &IC, std::vector<size_t> &JC,
 
     size_t IA_size = IA.size();
     size_t JA_size = JA.size();
+
+    std::cout << IB.size() << " " << JB.size() << std::endl;
 
     // Create partitions
     std::vector<std::vector<size_t> *> partitioned_IC(num_threads);
@@ -51,10 +43,6 @@ void mxm_partition_merge(std::vector<size_t> &IC, std::vector<size_t> &JC,
         partitioned_JC[t] = new std::vector<size_t>();
     }
 
-    STOP_TIMING;
-
-    START_TIMING;
-
 // Loop for each row vector in B
 #pragma omp parallel for num_threads(num_threads)
     for (size_t partition = 0; partition < num_threads; partition++) {
@@ -70,18 +58,16 @@ void mxm_partition_merge(std::vector<size_t> &IC, std::vector<size_t> &JC,
             mxv_like_v1(tmp_C, M_st, M_size, IA_arr, IA_size, JA_arr, JA_size,
                         B_st, B_size);
 
+            // std::cout << M_size << " " << B_size << " " << IA_size << " "
+            //           << JA_size << " " << tmp_C.size() << std::endl;
+
             // FIXME: We should not copy (unnecessary operations)
             partitioned_JC[partition]->insert(partitioned_JC[partition]->end(),
                                               tmp_C.begin(), tmp_C.end());
-
             partitioned_IC[partition]->push_back(
                 partitioned_JC[partition]->size());
         }
     }
-
-    STOP_TIMING;
-
-    START_TIMING;
 
     // Merge
     IC.push_back(0);
@@ -100,6 +86,4 @@ void mxm_partition_merge(std::vector<size_t> &IC, std::vector<size_t> &JC,
                   partitioned_IC[partition]->end());
         delete partitioned_IC[partition];
     }
-
-    STOP_TIMING;
 }

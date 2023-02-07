@@ -140,7 +140,7 @@ CC_COMMON_H=$(SRCDIR)/src/common.h
 include $(MK)/defs
 
 $(info # Building into $(BINDIR))
-$(info # Using CC=$(CC))
+$(info # Using CXX=$(CXX))
 
 ifeq ($(UNIT_TESTS),1)
 CMAKE_DEFS += UNIT_TESTS:BOOL=on
@@ -230,7 +230,7 @@ redisearch: $(REDISEARCH_LIBS)
 
 $(REDISEARCH_LIBS):
 	@echo Building $@ ...
-	$(SHOW)$(MAKE) -C $(REDISEARCH_DIR) STATIC=1 BINROOT=$(REDISEARCH_BINROOT) CC=$(CC) CXX=$(CXX)
+	$(SHOW)$(MAKE) -C $(REDISEARCH_DIR) STATIC=1 BINROOT=$(REDISEARCH_BINROOT) CC=$(CXX) CXX=$(CXX)
 
 .PHONY: libcypher-parser graphblas redisearch libxxhash rax
 

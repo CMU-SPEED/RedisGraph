@@ -1,31 +1,42 @@
 #include <algorithm>
 #include <cassert>
 #include <chrono>
+#include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <vector>
 
-#include "gb_mxm_like.hpp"
-#include "subgraph_enumeration.hpp"
+extern "C" {
+#include "../../deps/GraphBLAS/Include/GraphBLAS.h"
+#include "../util/arr.h"
+}
 
-#define START_TIMING                                                 \
-    start = std::chrono::duration_cast<std::chrono::microseconds>(   \
-                std::chrono::system_clock::now().time_since_epoch()) \
-                .count();
+extern "C" void gb_matrix_filter(GrB_Matrix &C, GrB_Matrix M, GrB_Matrix B,
+                                 GrB_Matrix A, uint64_t v);
 
-#define STOP_TIMING                                                 \
-    stop = std::chrono::duration_cast<std::chrono::microseconds>(   \
-               std::chrono::system_clock::now().time_since_epoch()) \
-               .count();                                            \
-    std::cout << (stop - start) / 1000.0 << ",";
+extern "C" void gb_matrix_intersection(GrB_Matrix &C, GrB_Matrix M,
+                                       GrB_Matrix B, GrB_Matrix A,
+                                       std::vector<uint64_t> &v);
 
-size_t bfs_se_template(std::vector<std::vector<size_t> > &output,
-                       std::vector<std::vector<size_t> > N_P_plus, GrB_Matrix A,
-                       size_t mode) {
-    size_t start, stop;
-    size_t oh = 0;
+extern "C" void gb_mxm_like_partition_merge(GrB_Matrix &C, GrB_Matrix &M,
+                                            GrB_Matrix &A, GrB_Matrix &B);
 
-    // Pre-Initialization
-    START_TIMING;
+extern "C" void gb_set_include(bool *z, const uint64_t *x, uint64_t i,
+                               uint64_t j, const uint64_t *y) {
+    std::vector<uint64_t> set = *((std::vector<uint64_t> *)*y);
+    *z = std::find(set.begin(), set.end(), *x) != set.end();
+}
+
+extern "C" void enumerate_subgraph(uint64_t ***out, uint64_t *out_size,
+                                   uint64_t **plan, GrB_Matrix A,
+                                   uint64_t mode) {
+    // Rebuild N_P_plus as STL/C++ vector
+    std::vector<std::vector<uint64_t>> N_P_plus(array_len(plan));
+    for (uint64_t i = 0; i < array_len(plan); i++) {
+        for (uint64_t j = 0; j < array_len(plan[i]); j++) {
+            N_P_plus[i].push_back(plan[i][j]);
+        }
+    }
 
     // Variable Initialization
     GrB_Info info;
@@ -33,7 +44,7 @@ size_t bfs_se_template(std::vector<std::vector<size_t> > &output,
     // Set Inclusion Operator
     GrB_IndexUnaryOp set_include_op;
     info = GrB_IndexUnaryOp_new(&set_include_op,
-                                (GxB_index_unary_function)grb_set_include,
+                                (GxB_index_unary_function)gb_set_include,
                                 GrB_BOOL, GrB_UINT64, GrB_UINT64);
     assert(info == GrB_SUCCESS);
 
@@ -43,29 +54,17 @@ size_t bfs_se_template(std::vector<std::vector<size_t> > &output,
     GrB_Matrix_nrows(&V_G_size, A);
     std::vector<GrB_Matrix> R(V_P_size);
 
-    // Pre-Initialization
-    STOP_TIMING;
-
-    // Initialization Phase
-    START_TIMING;
-
     // ⭐️ Compute R[0]
     // R[0] = b(diag(V(G)))
     info = GrB_Matrix_new(&(R[0]), GrB_UINT64, V_G_size, V_G_size);
     assert(info == GrB_SUCCESS);
-    for (size_t i = 0; i < V_G_size; i++) {
+    for (uint64_t i = 0; i < V_G_size; i++) {
         info = GrB_Matrix_setElement_UINT64(R[0], 1, i, i);
         assert(info == GrB_SUCCESS);
     }
 
-    // Initialization Phase
-    STOP_TIMING;
-
     // ⭐️ Loop from 1 to |V(P)| (excluding)
-    for (size_t i = 1; i < V_P_size; i++) {
-        // Pre-Compute Phase
-        START_TIMING;
-
+    for (uint64_t i = 1; i < V_P_size; i++) {
         // ⭐️ Compute C
         // ((R[i-1] * (R[i-1] in O[i])) (^,^) A) * b(R[i-1] = 0)
         // Candidate Matrix
@@ -85,14 +84,13 @@ size_t bfs_se_template(std::vector<std::vector<size_t> > &output,
                                         (uint64_t) & (N_P_plus[i]), GrB_NULL);
         assert(info == GrB_SUCCESS);
 
-        // Pre-Compute Phase
-        STOP_TIMING;
-
-        // Compute Phase
-        START_TIMING;
+        GxB_Matrix_fprint(R[i - 1], "R[i-1]", GxB_SHORT, stdout);
+        GxB_Matrix_fprint(R_in_O, "R_in_O", GxB_SHORT, stdout);
+        GxB_Matrix_fprint(A, "A", GxB_SHORT, stdout);
 
         // 👉 Use mxm-like routine
         GrB_Matrix C;
+
         switch (mode) {
             case 1:
                 gb_matrix_filter(C, R[i - 1], R_in_O, A, N_P_plus[i].size());
@@ -101,25 +99,18 @@ size_t bfs_se_template(std::vector<std::vector<size_t> > &output,
                 gb_matrix_intersection(C, R[i - 1], R_in_O, A, N_P_plus[i]);
                 break;
             case 3:
-                // oh +=
-                // multiple_vxm_like_v4_mt_partitioned_with_grb_conversion(
-                //     C, R[i - 1], R_in_O, A);
-                // break;
-                oh += gb_mxm_like_partition_merge(C, R[i - 1], R_in_O, A);
+                gb_mxm_like_partition_merge(C, R[i - 1], R_in_O, A);
                 break;
         }
 
-        // Pre-Compute Phase
-        STOP_TIMING;
-
-        // Pre-Materialization Phase
-        START_TIMING;
+        GxB_Matrix_fprint(C, "C", GxB_SHORT, stdout);
 
         // ⭐️ Compute R[i]
         // 👉 Loop for each row vector m in R[i-1]
         //    Select row vector m with (selection vector * A)
         GrB_Index C_nvals;
         info = GrB_Matrix_nvals(&C_nvals, C);
+        std::cout << info << std::endl;
         assert(info == GrB_SUCCESS);
 
         // 👉 Loop for each element in C
@@ -155,22 +146,16 @@ size_t bfs_se_template(std::vector<std::vector<size_t> > &output,
                                                &R_nvals, R[i - 1]);
         assert(info == GrB_SUCCESS);
 
-        // Pre-Materialization Phase
-        STOP_TIMING;
-
-        // Materialization Phase
-        START_TIMING;
-
         GrB_Index j = 0, idx = 0;
-        for (size_t k = 0; k < R_rows; k++) {
-            for (size_t ic = IC[k]; ic < IC[k + 1]; ic++) {
-                size_t p = JC[ic];
+        for (uint64_t k = 0; k < R_rows; k++) {
+            for (uint64_t ic = IC[k]; ic < IC[k + 1]; ic++) {
+                uint64_t p = JC[ic];
                 bool is_visited = false;
 
                 // R[i][j] = m + q
                 // where q is zero vector and q[p] = i
-                size_t en = (k * i) + i;
-                for (size_t l = k * i; l < en; l++) {
+                uint64_t en = (k * i) + i;
+                for (uint64_t l = k * i; l < en; l++) {
                     if (!is_visited && JR_prev[l] >= p) {
                         JR[idx] = p;
                         VR[idx] = (uint64_t)i + 1;
@@ -194,12 +179,6 @@ size_t bfs_se_template(std::vector<std::vector<size_t> > &output,
             }
         }
 
-        // Materialization Phase
-        STOP_TIMING;
-
-        // Post-Materialization Phase
-        START_TIMING;
-
         delete[] IR_prev;
         delete[] JR_prev;
         delete[] VR_prev;
@@ -213,29 +192,16 @@ size_t bfs_se_template(std::vector<std::vector<size_t> > &output,
         delete[] JR;
         delete[] VR;
 
-        // FIXME: May need to remove
         info = GrB_Matrix_free(&(R[i - 1]));
         assert(info == GrB_SUCCESS);
-
-        // Post-Materialization Phase
-        STOP_TIMING;
     }
-
-    // Pre-Ending Phase
-    START_TIMING;
 
     // Free structures
     info = GrB_IndexUnaryOp_free(&set_include_op);
     assert(info == GrB_SUCCESS);
 
-    // Pre-Ending Phase
-    STOP_TIMING;
-
-    // Ending Phase
-    START_TIMING;
-
     // Extract output
-    size_t pattern_size = N_P_plus.size();
+    uint64_t pattern_size = N_P_plus.size();
     GrB_Index output_size;
     info = GrB_Matrix_nvals(&output_size, R[pattern_size - 1]);
     assert(info == GrB_SUCCESS);
@@ -249,29 +215,22 @@ size_t bfs_se_template(std::vector<std::vector<size_t> > &output,
     GrB_Matrix_free(&(R[pattern_size - 1]));
 
     // Put output into the output vector
-    uint64_t *cur;
-    std::vector<size_t> tmp;
-    tmp.resize(pattern_size);
-    for (size_t i = 0; i < output_size; i += pattern_size) {
-        cur = &(VR_last[i]);
-        for (size_t j = 0; j < pattern_size; j++) {
-            tmp[VR_last[i + j] - 1] = JR_last[i + j];
+    *out_size = output_size / pattern_size;
+
+    *out = array_newlen(uint64_t *, *out_size);
+    for (uint64_t i = 0; i < *out_size; i++) {
+        uint64_t *tmp = NULL;
+        tmp = array_newlen(uint64_t, pattern_size);
+
+        for (uint64_t j = 0; j < pattern_size; j++) {
+            tmp[VR_last[(i * pattern_size) + j] - 1] =
+                JR_last[(i * pattern_size) + j];
         }
-        output.push_back(tmp);
+
+        (*out)[i] = tmp;
     }
-
-    // Ending Phase
-    STOP_TIMING;
-
-    // Post-Ending Phase
-    START_TIMING;
 
     delete[] IR_last;
     delete[] JR_last;
     delete[] VR_last;
-
-    // Post-Ending Phase
-    STOP_TIMING;
-
-    return oh;
 }
