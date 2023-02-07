@@ -52,7 +52,6 @@ ProcedureResult Proc_SubgraphEnumerationInvoke(ProcedureCtx *ctx,
 
     enumerate_subgraph(&(pdata->output), &(pdata->output_size), plan,
                        pdata->gc->g->adjacency_matrix->matrix, 3);
-    printf("Output Size: %d\n", pdata->output_size);
 
     // Free plan
     array_foreach(plan, e, array_free(e));
@@ -88,8 +87,7 @@ SIValue *Proc_SubgraphEnumerationStep(ProcedureCtx *ctx) {
         printf("%d\n", pdata->count);
     }
 #else
-    pdata->formatted_output[0] = SI_Array(1);
-    SIArray_Append(&(pdata->formatted_output[0]), SI_LongVal(pdata->output_size));
+    pdata->formatted_output[0] = SI_LongVal(pdata->output_size);
     pdata->count = pdata->output_size;
 #endif
 
@@ -114,8 +112,13 @@ ProcedureResult Proc_SubgraphEnumerationFree(ProcedureCtx *ctx) {
 ProcedureCtx *Proc_SubgraphEnumerationCtx() {
     void *privateData = NULL;
     ProcedureOutput *outputs = array_new(ProcedureOutput, 1);
+#ifdef MATERIALIZED
     ProcedureOutput output = {.name = "nodes", .type = T_ARRAY};
     array_append(outputs, output);
+#else
+    ProcedureOutput output = {.name = "count", .type = T_INT64};
+    array_append(outputs, output);
+#endif
 
     ProcedureCtx *ctx =
         ProcCtxNew("algo.subgraphEnumeration", 0, outputs,

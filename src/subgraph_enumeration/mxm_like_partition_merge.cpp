@@ -24,8 +24,6 @@ extern "C" void mxm_like_partition_merge(
     size_t IA_size = IA.size();
     size_t JA_size = JA.size();
 
-    std::cout << IB.size() << " " << JB.size() << std::endl;
-
     // Create partitions
     std::vector<std::vector<size_t> *> partitioned_IC(num_threads);
     std::vector<std::vector<size_t> *> partitioned_JC(num_threads);
@@ -57,9 +55,6 @@ extern "C" void mxm_like_partition_merge(
 
             mxv_like_v1(tmp_C, M_st, M_size, IA_arr, IA_size, JA_arr, JA_size,
                         B_st, B_size);
-
-            // std::cout << M_size << " " << B_size << " " << IA_size << " "
-            //           << JA_size << " " << tmp_C.size() << std::endl;
 
             // FIXME: We should not copy (unnecessary operations)
             partitioned_JC[partition]->insert(partitioned_JC[partition]->end(),

@@ -92,8 +92,6 @@ extern "C" void gb_mxm_like_partition_merge(GrB_Matrix &C, GrB_Matrix &M,
     // Do mxm
     mxm_like_partition_merge(IC, JC, IM, JM, IB, JB, IA, JA);
 
-    std::cout << std::endl << IC.size() << " " << JC.size() << std::endl;
-
     // If there is no data
     if (IC[nrows_C] == 0) {
         // New matrix

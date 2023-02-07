@@ -84,10 +84,6 @@ extern "C" void enumerate_subgraph(uint64_t ***out, uint64_t *out_size,
                                         (uint64_t) & (N_P_plus[i]), GrB_NULL);
         assert(info == GrB_SUCCESS);
 
-        GxB_Matrix_fprint(R[i - 1], "R[i-1]", GxB_SHORT, stdout);
-        GxB_Matrix_fprint(R_in_O, "R_in_O", GxB_SHORT, stdout);
-        GxB_Matrix_fprint(A, "A", GxB_SHORT, stdout);
-
         // 👉 Use mxm-like routine
         GrB_Matrix C;
 
@@ -103,14 +99,11 @@ extern "C" void enumerate_subgraph(uint64_t ***out, uint64_t *out_size,
                 break;
         }
 
-        GxB_Matrix_fprint(C, "C", GxB_SHORT, stdout);
-
         // ⭐️ Compute R[i]
         // 👉 Loop for each row vector m in R[i-1]
         //    Select row vector m with (selection vector * A)
         GrB_Index C_nvals;
         info = GrB_Matrix_nvals(&C_nvals, C);
-        std::cout << info << std::endl;
         assert(info == GrB_SUCCESS);
 
         // 👉 Loop for each element in C
