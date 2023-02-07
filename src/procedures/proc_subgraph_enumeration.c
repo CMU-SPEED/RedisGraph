@@ -29,7 +29,11 @@ typedef struct {
 ProcedureResult Proc_SubgraphEnumerationInvoke(ProcedureCtx *ctx,
                                                const SIValue *args,
                                                const char **yield) {
-    if (array_len((SIValue *)args) != 0) return PROCEDURE_ERR;
+    if (array_len((SIValue *)args) != 1) return PROCEDURE_ERR;
+
+    uint64_t query = args[0].longval;
+
+    if (query == 0 || query > 5) return PROCEDURE_ERR;
 
     SubgraphEnumerationContext *pdata =
         rm_malloc(sizeof(SubgraphEnumerationContext));
@@ -40,15 +44,84 @@ ProcedureResult Proc_SubgraphEnumerationInvoke(ProcedureCtx *ctx,
     pdata->output_size = 0;
     pdata->formatted_output = array_new(SIValue, 1);
 
-    // 3-clique query plan
-    pdata->query_size = 3;
-    uint64_t **plan = array_newlen(uint64_t *, 3);
-    plan[0] = array_newlen(uint64_t, 0);
-    plan[1] = array_newlen(uint64_t, 1);
-    plan[2] = array_newlen(uint64_t, 2);
-    plan[1][0] = 1;
-    plan[2][0] = 1;
-    plan[2][1] = 2;
+    // TODO: Add argument to change the plan
+    uint64_t **plan;
+    switch (query) {
+        case 1:
+            // 3-clique query plan
+            pdata->query_size = 3;
+            plan = array_newlen(uint64_t *, pdata->query_size);
+            plan[0] = array_newlen(uint64_t, 0);
+            plan[1] = array_newlen(uint64_t, 1);
+            plan[2] = array_newlen(uint64_t, 2);
+            plan[1][0] = 1;
+            plan[2][0] = 1;
+            plan[2][1] = 2;
+            break;
+        case 2:
+            // 4-loop query plan
+            pdata->query_size = 4;
+            plan = array_newlen(uint64_t *, pdata->query_size);
+            plan[0] = array_newlen(uint64_t, 0);
+            plan[1] = array_newlen(uint64_t, 1);
+            plan[2] = array_newlen(uint64_t, 1);
+            plan[3] = array_newlen(uint64_t, 2);
+            plan[1][0] = 1;
+            plan[2][0] = 2;
+            plan[3][0] = 1;
+            plan[3][1] = 3;
+            break;
+        case 3:
+            // 4-clique query plan
+            pdata->query_size = 4;
+            plan = array_newlen(uint64_t *, pdata->query_size);
+            plan[0] = array_newlen(uint64_t, 0);
+            plan[1] = array_newlen(uint64_t, 1);
+            plan[2] = array_newlen(uint64_t, 2);
+            plan[3] = array_newlen(uint64_t, 3);
+            plan[1][0] = 1;
+            plan[2][0] = 1;
+            plan[2][1] = 2;
+            plan[3][0] = 1;
+            plan[3][1] = 2;
+            plan[3][2] = 3;
+            break;
+        case 4:
+            // 5-loop query plan
+            pdata->query_size = 5;
+            plan = array_newlen(uint64_t *, pdata->query_size);
+            plan[0] = array_newlen(uint64_t, 0);
+            plan[1] = array_newlen(uint64_t, 1);
+            plan[2] = array_newlen(uint64_t, 1);
+            plan[3] = array_newlen(uint64_t, 1);
+            plan[4] = array_newlen(uint64_t, 2);
+            plan[1][0] = 1;
+            plan[2][0] = 2;
+            plan[3][0] = 3;
+            plan[4][0] = 1;
+            plan[4][1] = 4;
+            break;
+        case 5:
+            // 5-clique query plan
+            pdata->query_size = 5;
+            plan = array_newlen(uint64_t *, pdata->query_size);
+            plan[0] = array_newlen(uint64_t, 0);
+            plan[1] = array_newlen(uint64_t, 1);
+            plan[2] = array_newlen(uint64_t, 2);
+            plan[3] = array_newlen(uint64_t, 3);
+            plan[4] = array_newlen(uint64_t, 4);
+            plan[1][0] = 1;
+            plan[2][0] = 1;
+            plan[2][1] = 2;
+            plan[3][0] = 1;
+            plan[3][1] = 2;
+            plan[3][2] = 3;
+            plan[4][0] = 1;
+            plan[4][1] = 2;
+            plan[4][2] = 3;
+            plan[4][3] = 4;
+            break;
+    }
 
     enumerate_subgraph(&(pdata->output), &(pdata->output_size), plan,
                        pdata->gc->g->adjacency_matrix->matrix, 3);
@@ -70,7 +143,7 @@ SIValue *Proc_SubgraphEnumerationStep(ProcedureCtx *ctx) {
 
     // depleted?
     if (pdata->count >= pdata->output_size) return NULL;
-    // if (pdata->count >= 100) return NULL;
+        // if (pdata->count >= 100) return NULL;
 
 #ifdef MATERIALIZED
     pdata->formatted_output[0] = SI_Array(pdata->query_size);
@@ -121,7 +194,7 @@ ProcedureCtx *Proc_SubgraphEnumerationCtx() {
 #endif
 
     ProcedureCtx *ctx =
-        ProcCtxNew("algo.subgraphEnumeration", 0, outputs,
+        ProcCtxNew("algo.subgraphEnumeration", 1, outputs,
                    Proc_SubgraphEnumerationStep, Proc_SubgraphEnumerationInvoke,
                    Proc_SubgraphEnumerationFree, privateData, true);
     return ctx;
