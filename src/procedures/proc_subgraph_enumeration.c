@@ -123,10 +123,14 @@ ProcedureResult Proc_SubgraphEnumerationInvoke(ProcedureCtx *ctx,
             break;
     }
 
-    enumerate_subgraph(&(pdata->output), &(pdata->output_size), plan,
-                       pdata->gc->g->adjacency_matrix->matrix, 3);
+    GrB_Matrix A = NULL;
+    RG_Matrix_export(&A, Graph_GetAdjacencyMatrix(pdata->gc->g, false));
 
-    // Free plan
+    // Enumerate
+    enumerate_subgraph(&(pdata->output), &(pdata->output_size), plan, A, 3);
+
+    // Free
+    GrB_Matrix_free(&A);
     array_foreach(plan, e, array_free(e));
     array_free(plan);
 
