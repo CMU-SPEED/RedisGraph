@@ -121,6 +121,42 @@ ProcedureResult Proc_SubgraphEnumerationInvoke(ProcedureCtx *ctx,
             plan[4][2] = 3;
             plan[4][3] = 4;
             break;
+        case 6:
+            // 3-chain query plan
+            pdata->query_size = 3;
+            plan = array_newlen(uint64_t *, pdata->query_size);
+            plan[0] = array_newlen(uint64_t, 0);
+            plan[1] = array_newlen(uint64_t, 1);
+            plan[2] = array_newlen(uint64_t, 1);
+            plan[1][0] = 1;
+            plan[2][0] = 2;
+            break;
+        case 7:
+            // 4-chain query plan
+            pdata->query_size = 4;
+            plan = array_newlen(uint64_t *, pdata->query_size);
+            plan[0] = array_newlen(uint64_t, 0);
+            plan[1] = array_newlen(uint64_t, 1);
+            plan[2] = array_newlen(uint64_t, 1);
+            plan[3] = array_newlen(uint64_t, 1);
+            plan[1][0] = 1;
+            plan[2][0] = 2;
+            plan[3][0] = 3;
+            break;
+        case 8:
+            // 5-chain query plan
+            pdata->query_size = 5;
+            plan = array_newlen(uint64_t *, pdata->query_size);
+            plan[0] = array_newlen(uint64_t, 0);
+            plan[1] = array_newlen(uint64_t, 1);
+            plan[2] = array_newlen(uint64_t, 1);
+            plan[3] = array_newlen(uint64_t, 1);
+            plan[4] = array_newlen(uint64_t, 1);
+            plan[1][0] = 1;
+            plan[2][0] = 2;
+            plan[3][0] = 3;
+            plan[4][0] = 3;
+            break;
     }
 
     GrB_Matrix A = NULL;
