@@ -1,3 +1,5 @@
+#include <stdio.h>
+
 #include <algorithm>
 #include <cassert>
 #include <chrono>
@@ -11,14 +13,15 @@ extern "C" {
 #include "../../deps/GraphBLAS/Include/GraphBLAS.h"
 }
 
-extern "C" void mxm_like_partition_merge(std::vector<size_t> &IC, std::vector<size_t> &JC,
-                              std::vector<size_t> &IM, std::vector<size_t> &JM,
-                              std::vector<size_t> &IA, std::vector<size_t> &JA,
-                              std::vector<size_t> &IB,
-                              std::vector<size_t> &JB);
+extern "C" void mxm_like_partition_merge(
+    std::vector<size_t> &IC, std::vector<size_t> &JC, std::vector<size_t> &IM,
+    std::vector<size_t> &JM, std::vector<size_t> &IA, std::vector<size_t> &JA,
+    std::vector<size_t> &IB, std::vector<size_t> &JB);
 
 extern "C" void gb_mxm_like_partition_merge(GrB_Matrix &C, GrB_Matrix &M,
                                             GrB_Matrix &A, GrB_Matrix &B) {
+    // printf("gb_mxm_like_partition_merge\n");
+
     GrB_Info info;
 
     // ⭐️ Extract essential information
@@ -26,14 +29,18 @@ extern "C" void gb_mxm_like_partition_merge(GrB_Matrix &C, GrB_Matrix &M,
     GrB_Matrix_nvals(&nvals_A, A);
     GrB_Matrix_nrows(&nrows_A, A);
     GrB_Matrix_ncols(&ncols_A, A);
+
     GrB_Index nrows_B, ncols_B, nvals_B;
     GrB_Matrix_nvals(&nvals_B, B);
     GrB_Matrix_nrows(&nrows_B, B);
     GrB_Matrix_ncols(&ncols_B, B);
-    GrB_Index nrows_M, ncols_M, nvals_M;
-    GrB_Matrix_nvals(&nvals_M, M);
-    GrB_Matrix_nrows(&nrows_M, M);
-    GrB_Matrix_ncols(&ncols_M, M);
+
+    GrB_Index nrows_M = nrows_A, ncols_M = ncols_B, nvals_M = 0;
+    if (M != NULL) {
+        GrB_Matrix_nvals(&nvals_M, M);
+        GrB_Matrix_nrows(&nrows_M, M);
+        GrB_Matrix_ncols(&ncols_M, M);
+    }
 
     // ⭐️ Assert dimensions
     // M
@@ -53,11 +60,13 @@ extern "C" void gb_mxm_like_partition_merge(GrB_Matrix &C, GrB_Matrix &M,
     // Extract A
     GrB_Index *IA_arr = new GrB_Index[nrows_A + 1];
     GrB_Index *JA_arr = new GrB_Index[nvals_A];
-    uint64_t *VA_arr = new uint64_t[nvals_A];
+    bool *VA_arr = new bool[nvals_A];
     GrB_Index IA_len = nrows_A + 1, JA_len = nvals_A, VA_len = nvals_A;
-    info = GrB_Matrix_export_UINT64(IA_arr, JA_arr, VA_arr, &IA_len, &JA_len,
+    info = GrB_Matrix_export_BOOL(IA_arr, JA_arr, VA_arr, &IA_len, &JA_len,
                                     &VA_len, GrB_CSR_FORMAT, A);
     assert(info == GrB_SUCCESS);
+    delete[] VA_arr;
+
     // Extract B
     GrB_Index *IB_arr = new GrB_Index[nrows_B + 1];
     GrB_Index *JB_arr = new GrB_Index[nvals_B];
@@ -66,14 +75,22 @@ extern "C" void gb_mxm_like_partition_merge(GrB_Matrix &C, GrB_Matrix &M,
     info = GrB_Matrix_export_BOOL(IB_arr, JB_arr, VB_arr, &IB_len, &JB_len,
                                   &VB_len, GrB_CSR_FORMAT, B);
     assert(info == GrB_SUCCESS);
+    delete[] VB_arr;
+
     // Extract M
-    GrB_Index *IM_arr = new GrB_Index[nrows_M + 1];
-    GrB_Index *JM_arr = new GrB_Index[nvals_M];
-    uint64_t *VM_arr = new uint64_t[nvals_M];
-    GrB_Index IM_len = nrows_M + 1, JM_len = nvals_M, VM_len = nvals_M;
-    info = GrB_Matrix_export_UINT64(IM_arr, JM_arr, VM_arr, &IM_len, &JM_len,
-                                    &VM_len, GrB_CSR_FORMAT, M);
-    assert(info == GrB_SUCCESS);
+    GrB_Index *IM_arr, *JM_arr, *VM_arr, IM_len = 0, JM_len = 0, VM_len = 0;
+    if (M != NULL) {
+        IM_arr = new GrB_Index[nrows_M + 1];
+        JM_arr = new GrB_Index[nvals_M];
+        VM_arr = new uint64_t[nvals_M];
+        IM_len = nrows_M + 1;
+        JM_len = nvals_M;
+        VM_len = nvals_M;
+        info = GrB_Matrix_export_UINT64(IM_arr, JM_arr, VM_arr, &IM_len,
+                                        &JM_len, &VM_len, GrB_CSR_FORMAT, M);
+        assert(info == GrB_SUCCESS);
+        delete[] VM_arr;
+    }
 
     std::vector<size_t> IA(IA_arr, IA_arr + (nrows_A + 1));
     delete[] IA_arr;
@@ -83,10 +100,15 @@ extern "C" void gb_mxm_like_partition_merge(GrB_Matrix &C, GrB_Matrix &M,
     delete[] IB_arr;
     std::vector<size_t> JB(JB_arr, JB_arr + nvals_B);
     delete[] JB_arr;
-    std::vector<size_t> IM(IM_arr, IM_arr + (nrows_M + 1));
-    delete[] IM_arr;
-    std::vector<size_t> JM(JM_arr, JM_arr + nvals_M);
-    delete[] JM_arr;
+
+    std::vector<size_t> IM, JM;
+    if (M != NULL) {
+        IM = std::vector<size_t>(IM_arr, IM_arr + (nrows_M + 1));
+        delete[] IM_arr;
+        JM = std::vector<size_t>(JM_arr, JM_arr + nvals_M);
+        delete[] JM_arr;
+    }
+
     std::vector<size_t> IC, JC;
 
     // Do mxm
@@ -107,4 +129,9 @@ extern "C" void gb_mxm_like_partition_merge(GrB_Matrix &C, GrB_Matrix &M,
         delete[] VC_data;
     }
     assert(info == GrB_SUCCESS);
+}
+
+extern "C" void _gb_mxm_like_partition_merge(GrB_Matrix *C, GrB_Matrix *M,
+                                             GrB_Matrix *A, GrB_Matrix *B) {
+    gb_mxm_like_partition_merge(*C, *M, *A, *B);
 }

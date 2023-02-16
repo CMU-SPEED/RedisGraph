@@ -1,3 +1,5 @@
+#include <stdio.h>
+
 #include <algorithm>
 #include <cassert>
 #include <chrono>
@@ -77,7 +79,7 @@ extern "C" void enumerate_subgraph(uint64_t ***out, uint64_t *out_size,
         GrB_Index num_walks;
         info = GrB_Matrix_nrows(&num_walks, R[i - 1]);
         assert(info == GrB_SUCCESS);
-        info = GrB_Matrix_new(&R_in_O, GrB_UINT64, num_walks, V_G_size);
+        info = GrB_Matrix_new(&R_in_O, GrB_BOOL, num_walks, V_G_size);
         assert(info == GrB_SUCCESS);
         info = GrB_Matrix_select_UINT64(R_in_O, GrB_NULL, GrB_NULL,
                                         set_include_op, R[i - 1],

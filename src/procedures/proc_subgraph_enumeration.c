@@ -33,7 +33,7 @@ ProcedureResult Proc_SubgraphEnumerationInvoke(ProcedureCtx *ctx,
 
     uint64_t query = args[0].longval;
 
-    if (query == 0 || query > 5) return PROCEDURE_ERR;
+    if (query == 0 || query > 8) return PROCEDURE_ERR;
 
     SubgraphEnumerationContext *pdata =
         rm_malloc(sizeof(SubgraphEnumerationContext));
@@ -155,7 +155,7 @@ ProcedureResult Proc_SubgraphEnumerationInvoke(ProcedureCtx *ctx,
             plan[1][0] = 1;
             plan[2][0] = 2;
             plan[3][0] = 3;
-            plan[4][0] = 3;
+            plan[4][0] = 4;
             break;
     }
 

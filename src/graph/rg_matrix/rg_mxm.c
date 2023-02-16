@@ -7,6 +7,8 @@
 #include "RG.h"
 #include "rg_matrix.h"
 
+#include "../../subgraph_enumeration/subgraph_enumeration.hpp"
+
 GrB_Info RG_mxm                     // C = A * B
 (
     RG_Matrix C,                    // input/output matrix for results
@@ -88,9 +90,18 @@ GrB_Info RG_mxm                     // C = A * B
 		mask = NULL;
 	}
 
+#define ORIGINAL
 	// compute (A * B)<!mask>
+#ifdef ORIGINAL
+	// // Question - What is *mask*?
+	// // Mask is only initialized here - said to be used for deletion
+	// GxB_Matrix_fprint(mask, "mask", GxB_SHORT, stdout);
+
 	info = GrB_mxm(_C, mask, NULL, semiring, _A, _B, desc);
 	ASSERT(info == GrB_SUCCESS);
+#else
+	_gb_mxm_like_partition_merge(&(C->matrix), &mask, &_A, &_B);
+#endif
 
 	if(additions) {
 		info = GrB_eWiseAdd(_C, NULL, NULL, GxB_ANY_PAIR_BOOL, _C, accum, NULL);
@@ -103,4 +114,3 @@ GrB_Info RG_mxm                     // C = A * B
 
 	return info;
 }
-
