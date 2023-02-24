@@ -6,14 +6,19 @@
 
 #include "proc_subgraph_enumeration.h"
 
+#include <time.h>
+
 #include "../datatypes/array.h"
 #include "../graph/graphcontext.h"
 #include "../query_ctx.h"
 #include "../subgraph_enumeration/subgraph_enumeration.hpp"
 #include "../util/arr.h"
 #include "../util/rmalloc.h"
+#include "../util/simple_timer.h"
 #include "../value.h"
 #include "RG.h"
+
+#define MATERIALIZED
 
 // CALL algo.subgraphEnumeration()
 
@@ -30,6 +35,11 @@ ProcedureResult Proc_SubgraphEnumerationInvoke(ProcedureCtx *ctx,
                                                const SIValue *args,
                                                const char **yield) {
     if (array_len((SIValue *)args) != 1) return PROCEDURE_ERR;
+
+    double result = 0.0;
+    double tic[2];
+    simple_tic(tic);
+    printf("start timer: %f ms\n", result);
 
     uint64_t query = args[0].longval;
 
@@ -172,6 +182,9 @@ ProcedureResult Proc_SubgraphEnumerationInvoke(ProcedureCtx *ctx,
 
     ctx->privateData = pdata;
 
+    result += simple_toc(tic);
+    printf("end timer: %f ms\n", result * 1e3);
+
     return PROCEDURE_OK;
 }
 
@@ -196,9 +209,9 @@ SIValue *Proc_SubgraphEnumerationStep(ProcedureCtx *ctx) {
 
     pdata->count += 1;
 
-    if (pdata->count % 100000 == 0) {
-        printf("%d\n", pdata->count);
-    }
+    // if (pdata->count % 100000 == 0) {
+    //     printf("%d\n", pdata->count);
+    // }
 #else
     pdata->formatted_output[0] = SI_LongVal(pdata->output_size);
     pdata->count = pdata->output_size;

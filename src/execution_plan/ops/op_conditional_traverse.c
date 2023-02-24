@@ -6,11 +6,11 @@
 
 #include "op_conditional_traverse.h"
 
+#include <time.h>
+
 #include "../../query_ctx.h"
 #include "RG.h"
 #include "shared/print_functions.h"
-
-#include <time.h>
 
 // default number of records to accumulate before traversing
 // #define BATCH_SIZE 16
@@ -68,14 +68,17 @@ void _traverse(OpCondTraverse *op) {
     // populate filter matrix
     _populate_filter_matrix(op);
 
+// #define ORIGINAL
 #ifdef ORIGINAL
     // evaluate expression
     AlgebraicExpression_Eval(op->ae, op->M);
 #else
-	struct timespec start, stop;
-
+#ifdef FUSED_FILTER_AND_TRAVERSE
     // custom mxm
+    struct timespec start, stop;
+    double result = 0.0;
     clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start);
+
     GrB_Matrix mask;
     GrB_Index mask_nrows, mask_ncols;
     GrB_Matrix_nrows(&mask_nrows, op->M->matrix);
@@ -92,9 +95,11 @@ void _traverse(OpCondTraverse *op) {
             assert(info == GrB_SUCCESS);
         }
     }
+
     clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &stop);
-	double result = (stop.tv_sec - start.tv_sec) * 1e6 + (stop.tv_nsec - start.tv_nsec) / 1e3;
-	printf("mask_matrix_creation_cost: %f ms\n", result / 1e3);
+    result = (stop.tv_sec - start.tv_sec) * 1e6 +
+             (stop.tv_nsec - start.tv_nsec) / 1e3;
+    printf("overhead_cost: %f ms\n", result / 1e3);
 
     GrB_Info info =
         GrB_mxm(op->M->matrix, mask, GrB_NULL, GrB_LOR_LAND_SEMIRING_BOOL,
@@ -102,6 +107,9 @@ void _traverse(OpCondTraverse *op) {
     assert(info == GrB_SUCCESS);
 
     GrB_Matrix_free(&mask);
+#else
+    // TODO: Common Neighbor Traversal
+#endif
 #endif
 
     RG_MatrixTupleIter_attach(&op->iter, op->M);
@@ -171,6 +179,8 @@ static Record CondTraverseConsume(OpBase *opBase) {
     NodeID src_id = INVALID_ENTITY_ID;
     NodeID dest_id = INVALID_ENTITY_ID;
 
+    // clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start);
+
     while (true) {
         GrB_Info info =
             RG_MatrixTupleIter_next_UINT64(&op->iter, &src_id, &dest_id, NULL);
@@ -211,6 +221,12 @@ static Record CondTraverseConsume(OpBase *opBase) {
         _traverse(op);
     }
 
+    // clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &stop);
+    // result += (stop.tv_sec - start.tv_sec) * 1e6 + (stop.tv_nsec -
+    // start.tv_nsec) / 1e3;
+
+    // clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start);
+
     /* Get node from current column. */
     op->r = op->records[src_id];
     // Populate the destination node and add it to the Record.
@@ -227,6 +243,10 @@ static Record CondTraverseConsume(OpBase *opBase) {
         // We're guaranteed to have at least one edge.
         EdgeTraverseCtx_SetEdge(op->edge_ctx, op->r);
     }
+
+    // clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &stop);
+    // result += (stop.tv_sec - start.tv_sec) * 1e6 +
+    //           (stop.tv_nsec - start.tv_nsec) / 1e3;
 
     return OpBase_CloneRecord(op->r);
 }
