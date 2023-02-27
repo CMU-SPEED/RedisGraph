@@ -65,15 +65,15 @@ void _traverse(OpCondTraverse *op) {
         AlgebraicExpression_Optimize(&op->ae);
     }
 
+// #define ORIGINAL
+#ifdef ORIGINAL
     // populate filter matrix
     _populate_filter_matrix(op);
 
-// #define ORIGINAL
-#ifdef ORIGINAL
     // evaluate expression
     AlgebraicExpression_Eval(op->ae, op->M);
 #else
-#ifdef FUSED_FILTER_AND_TRAVERSE
+    // Mask creation
     // custom mxm
     struct timespec start, stop;
     double result = 0.0;
@@ -100,16 +100,61 @@ void _traverse(OpCondTraverse *op) {
     result = (stop.tv_sec - start.tv_sec) * 1e6 +
              (stop.tv_nsec - start.tv_nsec) / 1e3;
     printf("overhead_cost: %f ms\n", result / 1e3);
+#define CN_ACCUMULATE_SELECT
+#ifdef FUSED_FILTER_AND_TRAVERSE
+    // // populate filter matrix
+    // _populate_filter_matrix(op);
 
     GrB_Info info =
         GrB_mxm(op->M->matrix, mask, GrB_NULL, GrB_LOR_LAND_SEMIRING_BOOL,
                 op->F->matrix, op->graph->adjacency_matrix->matrix, GrB_DESC_C);
     assert(info == GrB_SUCCESS);
-
-    GrB_Matrix_free(&mask);
-#else
-    // TODO: Common Neighbor Traversal
 #endif
+#ifdef CN_ACCUMULATE_SELECT
+    // TODO: Create filter matrix for non-chains
+    (void)op->F->matrix;
+
+    // TODO: Common Neighbor Traversal
+    // TODO(1): Quick and Dirty GrB (MxM - PLUS_TIMES) and SELECT
+
+    // TODO(1): Initialize t
+    GrB_Matrix t;
+    // Dimension(T) = Dimension(F)
+    GrB_Index t_nrows, t_ncols;
+    GrB_Matrix_nrows(&t_nrows, op->F->matrix);
+    GrB_Matrix_ncols(&t_ncols, op->F->matrix);
+    GrB_Matrix_new(&t, GrB_UINT64, t_nrows, t_ncols);
+
+    // TODO(1): Get number of vertices per subgraph
+    if (op->record_count != 0) {
+        uint64_t num_vertices = Record_length(op->records[0]);
+
+        // Create F
+        GrB_Matrix F;
+        GrB_Matrix_new(&t, GrB_UINT64, t_nrows, t_ncols);
+        // FIXME
+        GrB_Matrix_select_UINT64(F, GrB_NULL, GrB_NULL, OP_IN, mask, set[num_vertices - 1], GrB_NULL);
+
+        // TODO(1): Ensure that the output is integer (not boolean)
+        GrB_Info info = GrB_mxm(
+            t, mask, GrB_NULL, GrB_PLUS_TIMES_SEMIRING_UINT64, F,
+            op->graph->adjacency_matrix->matrix, GrB_DESC_C);
+        assert(info == GrB_SUCCESS);
+
+        // TODO(1): Ensure t and num_vertices
+        info = GrB_Matrix_select_UINT64(op->M->matrix, GrB_NULL, GrB_NULL,
+                                        GrB_VALUEEQ_UINT64, t, num_vertices,
+                                        GrB_NULL);
+        assert(info == GrB_SUCCESS);
+    }
+#endif
+#ifdef CN_INTERSECTION
+
+#endif
+#ifdef CN_MXM_LIKE
+
+#endif
+    GrB_Matrix_free(&mask);
 #endif
 
     RG_MatrixTupleIter_attach(&op->iter, op->M);
