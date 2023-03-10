@@ -11,6 +11,7 @@
 
 extern "C" {
 #include "../../deps/GraphBLAS/Include/GraphBLAS.h"
+#include "../util/simple_timer.h"
 }
 
 extern "C" void mxm_like_partition_merge(
@@ -78,15 +79,16 @@ extern "C" void gb_mxm_like_partition_merge(GrB_Matrix &C, GrB_Matrix &M,
     delete[] VB_arr;
 
     // Extract M
-    GrB_Index *IM_arr, *JM_arr, *VM_arr, IM_len = 0, JM_len = 0, VM_len = 0;
+    GrB_Index *IM_arr, *JM_arr, IM_len = 0, JM_len = 0, VM_len = 0;
+    bool *VM_arr;
     if (M != NULL) {
         IM_arr = new GrB_Index[nrows_M + 1];
         JM_arr = new GrB_Index[nvals_M];
-        VM_arr = new uint64_t[nvals_M];
+        VM_arr = new bool[nvals_M];
         IM_len = nrows_M + 1;
         JM_len = nvals_M;
         VM_len = nvals_M;
-        info = GrB_Matrix_export_UINT64(IM_arr, JM_arr, VM_arr, &IM_len,
+        info = GrB_Matrix_export_BOOL(IM_arr, JM_arr, VM_arr, &IM_len,
                                         &JM_len, &VM_len, GrB_CSR_FORMAT, M);
         assert(info == GrB_SUCCESS);
         delete[] VM_arr;
@@ -111,8 +113,15 @@ extern "C" void gb_mxm_like_partition_merge(GrB_Matrix &C, GrB_Matrix &M,
 
     std::vector<size_t> IC, JC;
 
+    double result = 0.0;
+    double tic[2];
+    simple_tic(tic);
+
     // Do mxm
     mxm_like_partition_merge(IC, JC, IM, JM, IB, JB, IA, JA);
+
+    result = simple_toc(tic);
+    printf("mxm_like_partition_merge: %f ms\n", result * 1e3);
 
     // If there is no data
     if (IC[nrows_C] == 0) {
@@ -133,5 +142,12 @@ extern "C" void gb_mxm_like_partition_merge(GrB_Matrix &C, GrB_Matrix &M,
 
 extern "C" void _gb_mxm_like_partition_merge(GrB_Matrix *C, GrB_Matrix *M,
                                              GrB_Matrix *A, GrB_Matrix *B) {
+    double result = 0.0;
+    double tic[2];
+    simple_tic(tic);
+
     gb_mxm_like_partition_merge(*C, *M, *A, *B);
+
+    result = simple_toc(tic);
+    printf("gb_mxm_like_partition_merge: %f ms\n", result * 1e3);
 }

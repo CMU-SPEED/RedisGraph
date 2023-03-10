@@ -50,3 +50,8 @@ extern "C" void gb_matrix_intersection(GrB_Matrix &C, GrB_Matrix M,
     info = GrB_Matrix_free(&S);
     assert(info == GrB_SUCCESS);
 }
+
+// extern "C" void _gb_matrix_intersection(GrB_Matrix *C, GrB_Matrix *M,
+//                                              GrB_Matrix *A, GrB_Matrix *B) {
+//     gb_matrix_intersection(*C, *M, *A, *B);
+// }

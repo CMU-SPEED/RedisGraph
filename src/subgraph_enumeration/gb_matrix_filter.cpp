@@ -33,3 +33,8 @@ extern "C" void gb_matrix_filter(GrB_Matrix &C, GrB_Matrix M, GrB_Matrix B,
     info = GrB_Matrix_free(&S);
     assert(info == GrB_SUCCESS);
 }
+
+extern "C" void _gb_matrix_filter(GrB_Matrix *C, GrB_Matrix *M,
+                                             GrB_Matrix *A, GrB_Matrix *B, uint64_t v) {
+    gb_matrix_filter(*C, *M, *A, *B, v);
+}
