@@ -309,6 +309,8 @@ static void _ExecuteQuery(void *args) {
 		// avoid resetting policies between readers and writers
 		Graph_SetMatrixPolicy(gc->g, SYNC_POLICY_FLUSH_RESIZE);
 
+		printf("<entry>\n");
+
 		ExecutionPlan_PreparePlan(plan);
 		if(profile) {
 			ExecutionPlan_Profile(plan);
@@ -322,6 +324,8 @@ static void _ExecuteQuery(void *args) {
 			result_set = ExecutionPlan_Execute(plan);
 			abort_and_check_timeout(gq_ctx, plan);
 		}
+
+		printf("</entry>\n");
 
 		ExecutionPlan_Free(plan);
 		exec_ctx->plan = NULL;

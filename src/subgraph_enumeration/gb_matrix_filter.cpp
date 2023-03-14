@@ -37,4 +37,9 @@ extern "C" void gb_matrix_filter(GrB_Matrix &C, GrB_Matrix M, GrB_Matrix B,
 extern "C" void _gb_matrix_filter(GrB_Matrix *C, GrB_Matrix *M,
                                              GrB_Matrix *A, GrB_Matrix *B, uint64_t v) {
     gb_matrix_filter(*C, *M, *A, *B, v);
+
+    // GxB_Matrix_fprint(*A, "A", GxB_SUMMARY, stdout);
+    // GxB_Matrix_fprint(*B, "B", GxB_SUMMARY, stdout);
+    // GxB_Matrix_fprint(*M, "M", GxB_SUMMARY, stdout);
+    // GxB_Matrix_fprint(*C, "C", GxB_SUMMARY, stdout);
 }

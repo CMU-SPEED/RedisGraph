@@ -19,9 +19,18 @@ extern "C" void mxm_like_partition_merge(
     std::vector<size_t> &JM, std::vector<size_t> &IA, std::vector<size_t> &JA,
     std::vector<size_t> &IB, std::vector<size_t> &JB);
 
+extern "C" void mxm_like_partition_merge_indexless(
+    std::vector<uint64_t> &IC, std::vector<uint64_t> &JC, uint64_t M_size,
+    std::vector<uint64_t> &JM, std::vector<uint64_t> &IA,
+    std::vector<uint64_t> &JA, uint64_t B_size, std::vector<uint64_t> &JB);
+
 extern "C" void gb_mxm_like_partition_merge(GrB_Matrix &C, GrB_Matrix &M,
                                             GrB_Matrix &A, GrB_Matrix &B) {
     // printf("gb_mxm_like_partition_merge\n");
+    double result = 0.0;
+    double tic[2] = {0, 0};
+
+    simple_tic(tic);
 
     GrB_Info info;
 
@@ -64,7 +73,7 @@ extern "C" void gb_mxm_like_partition_merge(GrB_Matrix &C, GrB_Matrix &M,
     bool *VA_arr = new bool[nvals_A];
     GrB_Index IA_len = nrows_A + 1, JA_len = nvals_A, VA_len = nvals_A;
     info = GrB_Matrix_export_BOOL(IA_arr, JA_arr, VA_arr, &IA_len, &JA_len,
-                                    &VA_len, GrB_CSR_FORMAT, A);
+                                  &VA_len, GrB_CSR_FORMAT, A);
     assert(info == GrB_SUCCESS);
     delete[] VA_arr;
 
@@ -88,8 +97,8 @@ extern "C" void gb_mxm_like_partition_merge(GrB_Matrix &C, GrB_Matrix &M,
         IM_len = nrows_M + 1;
         JM_len = nvals_M;
         VM_len = nvals_M;
-        info = GrB_Matrix_export_BOOL(IM_arr, JM_arr, VM_arr, &IM_len,
-                                        &JM_len, &VM_len, GrB_CSR_FORMAT, M);
+        info = GrB_Matrix_export_BOOL(IM_arr, JM_arr, VM_arr, &IM_len, &JM_len,
+                                      &VM_len, GrB_CSR_FORMAT, M);
         assert(info == GrB_SUCCESS);
         delete[] VM_arr;
     }
@@ -113,15 +122,25 @@ extern "C" void gb_mxm_like_partition_merge(GrB_Matrix &C, GrB_Matrix &M,
 
     std::vector<size_t> IC, JC;
 
-    double result = 0.0;
-    double tic[2];
-    simple_tic(tic);
+    result = simple_toc(tic);
+    printf("ConvB %f\n", result * 1e3);
+
+    // simple_tic(tic);
 
     // Do mxm
+
+    // size_t M_size = JM.size() / (IM.size() - 1);
+    // size_t A_size = JA.size() / (IA.size() - 1);
+    // printf("M_size=%d, A_size=%d\n", M_size, A_size);
+    // mxm_like_partition_merge_indexless(IC, JC, JM.size(), JM, IB, JB,
+    // JA.size(), JA);
+
     mxm_like_partition_merge(IC, JC, IM, JM, IB, JB, IA, JA);
 
-    result = simple_toc(tic);
-    printf("mxm_like_partition_merge: %f ms\n", result * 1e3);
+    // result = simple_toc(tic);
+    // printf("mxm_like_partition_merge: %f ms\n", result * 1e3);
+
+    simple_tic(tic);
 
     // If there is no data
     if (IC[nrows_C] == 0) {
@@ -138,16 +157,24 @@ extern "C" void gb_mxm_like_partition_merge(GrB_Matrix &C, GrB_Matrix &M,
         delete[] VC_data;
     }
     assert(info == GrB_SUCCESS);
+
+    result = simple_toc(tic);
+    printf("ConvA %f\n", result * 1e3);
 }
 
 extern "C" void _gb_mxm_like_partition_merge(GrB_Matrix *C, GrB_Matrix *M,
                                              GrB_Matrix *A, GrB_Matrix *B) {
-    double result = 0.0;
-    double tic[2];
-    simple_tic(tic);
+    // double result = 0.0;
+    // double tic[2];
+    // simple_tic(tic);
 
     gb_mxm_like_partition_merge(*C, *M, *A, *B);
 
-    result = simple_toc(tic);
-    printf("gb_mxm_like_partition_merge: %f ms\n", result * 1e3);
+    // result = simple_toc(tic);
+    // printf("gb_mxm_like_partition_merge: %f ms\n", result * 1e3);
+
+    // GxB_Matrix_fprint(*A, "A", GxB_SUMMARY, stdout);
+    // GxB_Matrix_fprint(*B, "B", GxB_SUMMARY, stdout);
+    // GxB_Matrix_fprint(*M, "M", GxB_SUMMARY, stdout);
+    // GxB_Matrix_fprint(*C, "C", GxB_SUMMARY, stdout);
 }

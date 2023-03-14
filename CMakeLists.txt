@@ -18,6 +18,9 @@ else()
 endif()
 
 set_property(TARGET redisgraph PROPERTY C_STANDARD 11)
+set(CMAKE_CXX_FLAGS "-Wall -Wextra -fopenmp")
+set(CMAKE_CXX_FLAGS_DEBUG "-g")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
 include_directories(
 	${root}/src
