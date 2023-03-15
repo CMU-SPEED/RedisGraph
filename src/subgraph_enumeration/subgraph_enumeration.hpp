@@ -6,6 +6,9 @@ void enumerate_subgraph(uint64_t ***out, uint64_t *out_size, uint64_t **plan,
 void _gb_mxm_like_partition_merge(GrB_Matrix *C, GrB_Matrix *M, GrB_Matrix *A,
                                   GrB_Matrix *B);
 
+void _gb_mxm_like_partition(GrB_Matrix **C, GrB_Matrix *M, GrB_Matrix *A,
+                                  GrB_Matrix *B);
+
 void _gb_matrix_filter(GrB_Matrix *C, GrB_Matrix *M, GrB_Matrix *B,
                                  GrB_Matrix *A, uint64_t v);
 

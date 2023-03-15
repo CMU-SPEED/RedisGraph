@@ -20,15 +20,17 @@ CLIENT_LOG="/sharedstorage/ykerdcha/data/bfs-se-la/e2e/rg_client_$DATE.log"
 # Mode 3: CN_ACCUMULATE_SELECT
 # Mode 4: CN_MXM_LIKE
 
-
 unset TMUX;
+rm ./dump.rdb
 
-for mode in "ORIGINAL" "FUSED_FILTER_AND_TRAVERSE" "CN_ACCUMULATE_SELECT" "CN_MXM_LIKE"
+# for mode in "ORIGINAL" "FUSED_FILTER_AND_TRAVERSE" "CN_ACCUMULATE_SELECT" "CN_MXM_LIKE"
+for mode in "CN_MXM_LIKE"
 do
     # Make mode
     python3 scripts/mode_change.py "$mode";
     make;
-    for num_threads in 1 24;
+    for num_threads in 24;
+    # for num_threads in 1 24;
     do
         for file in /sharedstorage/markb1/ktruss_data/unsorted_bin/*;
         do

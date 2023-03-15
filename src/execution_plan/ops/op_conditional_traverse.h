@@ -20,6 +20,10 @@ typedef struct {
 	AlgebraicExpression *ae;
 	RG_Matrix F;                // Filter matrix.
 	RG_Matrix M;                // Algebraic expression result.
+	RG_Matrix *M_list;
+	uint M_list_cap;
+	uint M_list_cur;
+	uint *IM;
 	EdgeTraverseCtx *edge_ctx;  // Edge collection data if the edge needs to be set.
 	RG_MatrixTupleIter iter;    // Iterator over M.
 	int srcNodeIdx;             // Source node index into record.

@@ -7,6 +7,7 @@
 #include "op_conditional_traverse.h"
 
 #include <time.h>
+#include <omp.h>
 
 #include "../../query_ctx.h"
 #include "../../subgraph_enumeration/subgraph_enumeration.hpp"
@@ -46,6 +47,11 @@ static void _populate_filter_matrix(OpCondTraverse *op) {
     }
 }
 
+// DO NOT CHANGE
+/*start_mode_configuration*/
+#define CN_MXM_LIKE
+/*end_mode_configuration*/
+
 // evaluate algebraic expression:
 // prepends filter matrix as the left most operand
 // perform multiplications
@@ -70,11 +76,6 @@ void _traverse(OpCondTraverse *op) {
     // #define ORIGINAL
     double result = 0.0;
     double tic[2];
-
-// DO NOT CHANGE
-/*start_mode_configuration*/
-#define ORIGINAL
-/*end_mode_configuration*/
 
 #ifdef ORIGINAL
     // populate filter matrix
@@ -242,6 +243,9 @@ void _traverse(OpCondTraverse *op) {
     // TODO: Create filter matrix for non-chains
     // FIXME: This is only for cliques
 
+    size_t num_threads = op->M_list_cap;
+    GrB_Matrix *output_list = NULL;
+
     // TODO: Common Neighbor Traversal
     // TODO(1): Quick and Dirty GrB (MxM - PLUS_TIMES) and SELECT
 
@@ -261,20 +265,7 @@ void _traverse(OpCondTraverse *op) {
             if (Record_GetType(op->records[0], j) == REC_TYPE_NODE)
                 num_vertices++;
         }
-        // printf("num_vertices: %lu\n", num_vertices);
-
-        // // Create F
-        // GrB_Matrix F;
-        // GrB_Matrix_new(&t, GrB_UINT64, t_nrows, t_ncols);
-        // TODO(1): Introducing the set inclusion function
-        // // FIXME
-        // GrB_Matrix_select_UINT64(F, GrB_NULL, GrB_NULL, OP_IN, mask,
-        // set[num_vertices - 1], GrB_NULL);
-
-        // GxB_Matrix_fprint(mask, "S", GxB_SUMMARY, stdout);
-        // GxB_Matrix_fprint(op->graph->adjacency_matrix->matrix, "A",
-        // GxB_SUMMARY, stdout);
-
+     
         // Resize 1
         simple_tic(tic);
 
@@ -294,49 +285,46 @@ void _traverse(OpCondTraverse *op) {
         result = simple_toc(tic);
         printf("Prep %f\n", result * 1e3);
 
-        // // MxM
-        // simple_tic(tic);
+        output_list = (GrB_Matrix *)malloc(sizeof(GrB_Matrix) * num_threads);
+        if (output_list == NULL) {
+            return;
+        }
 
-        _gb_mxm_like_partition_merge(&(op->M->matrix), &mask, &mask, &A);
-
-        // result = simple_toc(tic);
-        // printf("Enum %f\n", result * 1e3);
-
-        // // Resize 2
-        // simple_tic(tic);
-
-        // // GrB_Index M_nrows;
-        // // GrB_Matrix_nrows(&M_nrows, op->M->matrix);
-
-        // // M_nrows =
-        // //     adjacency_matrix_nrows > M_nrows ? adjacency_matrix_nrows : M_nrows;
-        // // GrB_Matrix_resize(op->M->matrix, M_nrows,
-        // //                   adjacency_matrix_ncols);
-
-        // result = simple_toc(tic);
-        // printf("resize (step 2): %f ms\n", result * 1e3);
-
-        // // TODO(1): Ensure that the output is integer (not boolean)
-        // GrB_Info info = GrB_mxm(
-        //     t, mask, GrB_NULL, GrB_PLUS_TIMES_SEMIRING_UINT64, mask,
-        //     op->graph->adjacency_matrix->matrix, GrB_DESC_C);
-        // assert(info == GrB_SUCCESS);
-
-        // GxB_Matrix_fprint(t, "TEMP", GxB_SUMMARY, stdout);
-
-        // // TODO(1): Ensure t and num_vertices
-        // info = GrB_Matrix_select_UINT64(op->M->matrix, GrB_NULL, GrB_NULL,
-        //                                 GrB_VALUEEQ_UINT64, t, num_vertices,
-        //                                 GrB_NULL);
-        // assert(info == GrB_SUCCESS);
-
-        // GxB_Matrix_fprint(op->M->matrix, "OUT", GxB_SUMMARY, stdout);
+        _gb_mxm_like_partition(&output_list, &mask, &mask, &A);
     }
 #endif
     GrB_Matrix_free(&mask);
 #endif
 
+#ifndef CN_MXM_LIKE
     RG_MatrixTupleIter_attach(&op->iter, op->M);
+#else
+    op->M_list = (RG_Matrix *)malloc(sizeof(RG_Matrix) * num_threads);
+    if (op->M_list == NULL) {
+        return;
+    }
+
+    op->IM = (uint *)malloc(sizeof(uint) * (num_threads + 1));
+    if (op->M_list == NULL) {
+        return;
+    }
+    op->IM[0] = 0;
+
+    // M_list -> output_list
+    for (size_t i = 0; i < num_threads; i++) {
+        GrB_Index nrows, ncols;
+        GrB_Matrix_nrows(&nrows, output_list[i]);
+        GrB_Matrix_ncols(&ncols, output_list[i]);
+        RG_Matrix_new(&(op->M_list[i]), GrB_BOOL, nrows, ncols);
+        op->M_list[i]->matrix = output_list[i];
+        op->IM[i+1] = nrows + op->IM[i];
+    }
+
+    // Free output list
+    if (output_list != NULL) {
+        free(output_list);
+    }
+#endif
 }
 
 OpBase *NewCondTraverseOp(const ExecutionPlan *plan, Graph *g,
@@ -369,6 +357,12 @@ OpBase *NewCondTraverseOp(const ExecutionPlan *plan, Graph *g,
         QGEdge *e = QueryGraph_GetEdgeByAlias(plan->query_graph, edge);
         op->edge_ctx = EdgeTraverseCtx_New(ae, e, edge_idx);
     }
+
+    size_t num_threads = omp_get_max_threads();
+    op->M_list_cap = num_threads;
+    op->M_list_cur = 0;
+    op->M_list = NULL;
+    op->IM = NULL;
 
     return (OpBase *)op;
 }
@@ -410,7 +404,28 @@ static Record CondTraverseConsume(OpBase *opBase) {
             RG_MatrixTupleIter_next_UINT64(&op->iter, &src_id, &dest_id, NULL);
 
         // Managed to get a tuple, break.
-        if (info == GrB_SUCCESS) break;
+        if (info == GrB_SUCCESS) {
+#ifdef CN_MXM_LIKE
+            src_id += op->IM[op->M_list_cur-1];
+#endif
+            break;
+        }
+
+#ifdef CN_MXM_LIKE
+        else if (op->M_list != NULL) {
+            if (op->M_list_cur < op->M_list_cap) {
+                // printf("M_list_cur=%d\n", op->M_list_cur);
+                RG_MatrixTupleIter_attach(&op->iter, op->M_list[op->M_list_cur]);
+                op->M_list_cur++;
+                info = RG_MatrixTupleIter_next_UINT64(&op->iter, &src_id, &dest_id, NULL);
+            }
+        }
+        // Managed to get a tuple with the new iterator, break.
+        if (info == GrB_SUCCESS) {
+            src_id += op->IM[op->M_list_cur-1];
+            break;
+        }
+#endif
 
         /* Run out of tuples, try to get new data.
          * Free old records. */
@@ -450,6 +465,8 @@ static Record CondTraverseConsume(OpBase *opBase) {
     // start.tv_nsec) / 1e3;
 
     // clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start);
+
+    // printf("src=%d dest=%d\n", src_id, dest_id);
 
     /* Get node from current column. */
     op->r = op->records[src_id];
@@ -535,5 +552,16 @@ static void CondTraverseFree(OpBase *ctx) {
         }
         rm_free(op->records);
         op->records = NULL;
+    }
+
+    if (op->M_list) {
+        for (uint i = 0; i < op->M_list_cap; i++) {
+            RG_Matrix_free(&(op->M_list[i]));
+        }
+        free(op->M_list);
+    }
+
+    if (op->IM) {
+        free(op->IM);
     }
 }
