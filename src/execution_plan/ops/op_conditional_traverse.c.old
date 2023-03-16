@@ -73,9 +73,17 @@ void _traverse(OpCondTraverse *op) {
         AlgebraicExpression_Optimize(&op->ae);
     }
 
+    // #define ORIGINAL
     double result = 0.0;
     double tic[2];
 
+#ifdef ORIGINAL
+    // populate filter matrix
+    _populate_filter_matrix(op);
+
+    // evaluate expression
+    AlgebraicExpression_Eval(op->ae, op->M);
+#else
     // Mask creation
     // custom mxm
     simple_tic(tic);
@@ -100,9 +108,141 @@ void _traverse(OpCondTraverse *op) {
 
     result = simple_toc(tic);
     printf("Mask %f\n", result * 1e3);
+#ifdef FUSED_FILTER_AND_TRAVERSE
+    // populate filter matrix
+    _populate_filter_matrix(op);
 
+    GrB_Info info =
+        GrB_mxm(op->M->matrix, mask, GrB_NULL, GrB_LOR_LAND_SEMIRING_BOOL,
+                op->F->matrix, op->graph->adjacency_matrix->matrix, GrB_DESC_C);
+    assert(info == GrB_SUCCESS);
+#endif
+#ifdef CN_ACCUMULATE_SELECT
     // TODO: Create filter matrix for non-chains
     // FIXME: This is only for cliques
+
+    // TODO: Common Neighbor Traversal
+    // TODO(1): Quick and Dirty GrB (MxM - PLUS_TIMES) and SELECT
+
+    // TODO(1): Initialize t
+    GrB_Matrix t;
+    // Dimension(T) = Dimension(F)
+    GrB_Index t_nrows, t_ncols;
+    GrB_Matrix_nrows(&t_nrows, op->F->matrix);
+    GrB_Matrix_ncols(&t_ncols, op->F->matrix);
+    GrB_Matrix_new(&t, GrB_UINT64, t_nrows, t_ncols);
+
+    // TODO(1): Get number of vertices per subgraph
+    if (op->record_count != 0) {
+        uint64_t num_vertices = 0;
+        for (uint j = 0; j < Record_length(op->records[0]); j++) {
+            if (Record_GetType(op->records[0], j) == REC_TYPE_NODE)
+                num_vertices++;
+        }
+        // printf("num_vertices: %lu\n", num_vertices);
+
+        // // Create F
+        // GrB_Matrix F;
+        // GrB_Matrix_new(&t, GrB_UINT64, t_nrows, t_ncols);
+        // TODO(1): Introducing the set inclusion function
+        // // FIXME
+        // GrB_Matrix_select_UINT64(F, GrB_NULL, GrB_NULL, OP_IN, mask,
+        // set[num_vertices - 1], GrB_NULL);
+
+        // GxB_Matrix_fprint(mask, "S", GxB_SUMMARY, stdout);
+        // GxB_Matrix_fprint(op->graph->adjacency_matrix->matrix, "A",
+        // GxB_SUMMARY, stdout);
+
+        simple_tic(tic);
+
+        _gb_matrix_filter(&(op->M->matrix), &mask, &mask,
+                          &(op->graph->adjacency_matrix->matrix), num_vertices);
+
+        result = simple_toc(tic);
+        printf("Enum %f\n", result * 1e3);
+
+        // // TODO(1): Ensure that the output is integer (not boolean)
+        // GrB_Info info = GrB_mxm(
+        //     t, mask, GrB_NULL, GrB_PLUS_TIMES_SEMIRING_UINT64, mask,
+        //     op->graph->adjacency_matrix->matrix, GrB_DESC_C);
+        // assert(info == GrB_SUCCESS);
+
+        // GxB_Matrix_fprint(t, "TEMP", GxB_SUMMARY, stdout);
+
+        // // TODO(1): Ensure t and num_vertices
+        // info = GrB_Matrix_select_UINT64(op->M->matrix, GrB_NULL, GrB_NULL,
+        //                                 GrB_VALUEEQ_UINT64, t, num_vertices,
+        //                                 GrB_NULL);
+        // assert(info == GrB_SUCCESS);
+
+        // GxB_Matrix_fprint(op->M->matrix, "OUT", GxB_SUMMARY, stdout);
+    }
+#endif
+#ifdef CN_INTERSECTION
+    // TODO: Create filter matrix for non-chains
+    // FIXME: This is only for cliques
+
+    // TODO: Common Neighbor Traversal
+    // TODO(1): Quick and Dirty GrB (MxM - PLUS_TIMES) and SELECT
+
+    // TODO(1): Initialize t
+    GrB_Matrix t;
+    // Dimension(T) = Dimension(F)
+    GrB_Index t_nrows, t_ncols;
+    GrB_Matrix_nrows(&t_nrows, op->F->matrix);
+    GrB_Matrix_ncols(&t_ncols, op->F->matrix);
+    GrB_Matrix_new(&t, GrB_UINT64, t_nrows, t_ncols);
+
+    // TODO(1): Get number of vertices per subgraph
+    if (op->record_count != 0) {
+        uint64_t num_vertices = 0;
+        for (uint j = 0; j < Record_length(op->records[0]); j++) {
+            if (Record_GetType(op->records[0], j) == REC_TYPE_NODE)
+                num_vertices++;
+        }
+        // printf("num_vertices: %lu\n", num_vertices);
+
+        // // Create F
+        // GrB_Matrix F;
+        // GrB_Matrix_new(&t, GrB_UINT64, t_nrows, t_ncols);
+        // TODO(1): Introducing the set inclusion function
+        // // FIXME
+        // GrB_Matrix_select_UINT64(F, GrB_NULL, GrB_NULL, OP_IN, mask,
+        // set[num_vertices - 1], GrB_NULL);
+
+        // GxB_Matrix_fprint(mask, "S", GxB_SUMMARY, stdout);
+        // GxB_Matrix_fprint(op->graph->adjacency_matrix->matrix, "A",
+        // GxB_SUMMARY, stdout);
+
+        simple_tic(tic);
+
+        _gb_matrix_filter(&(op->M->matrix), &mask, &mask,
+                          &(op->graph->adjacency_matrix->matrix), num_vertices);
+
+        result = simple_toc(tic);
+        printf("_gb_matrix_filter: %f ms\n", result * 1e3);
+
+        // // TODO(1): Ensure that the output is integer (not boolean)
+        // GrB_Info info = GrB_mxm(
+        //     t, mask, GrB_NULL, GrB_PLUS_TIMES_SEMIRING_UINT64, mask,
+        //     op->graph->adjacency_matrix->matrix, GrB_DESC_C);
+        // assert(info == GrB_SUCCESS);
+
+        // GxB_Matrix_fprint(t, "TEMP", GxB_SUMMARY, stdout);
+
+        // // TODO(1): Ensure t and num_vertices
+        // info = GrB_Matrix_select_UINT64(op->M->matrix, GrB_NULL, GrB_NULL,
+        //                                 GrB_VALUEEQ_UINT64, t, num_vertices,
+        //                                 GrB_NULL);
+        // assert(info == GrB_SUCCESS);
+
+        // GxB_Matrix_fprint(op->M->matrix, "OUT", GxB_SUMMARY, stdout);
+    }
+#endif
+#ifdef CN_MXM_LIKE
+    // TODO: Create filter matrix for non-chains
+    // FIXME: This is only for cliques
+
     size_t num_threads = op->M_list_cap;
     GrB_Matrix *output_list = NULL;
 
@@ -152,9 +292,13 @@ void _traverse(OpCondTraverse *op) {
 
         _gb_mxm_like_partition(&output_list, &mask, &mask, &A);
     }
-
+#endif
     GrB_Matrix_free(&mask);
+#endif
 
+#ifndef CN_MXM_LIKE
+    RG_MatrixTupleIter_attach(&op->iter, op->M);
+#else
     op->M_list = (RG_Matrix *)malloc(sizeof(RG_Matrix) * num_threads);
     if (op->M_list == NULL) {
         return;
@@ -180,6 +324,7 @@ void _traverse(OpCondTraverse *op) {
     if (output_list != NULL) {
         free(output_list);
     }
+#endif
 }
 
 OpBase *NewCondTraverseOp(const ExecutionPlan *plan, Graph *g,
@@ -237,38 +382,9 @@ static OpResult CondTraverseInit(OpBase *opBase) {
 /* Each call to CondTraverseConsume emits a Record containing the
  * traversal's endpoints and, if required, an edge.
  * Returns NULL once all traversals have been performed. */
-
 static Record CondTraverseConsume(OpBase *opBase) {
     OpCondTraverse *op = (OpCondTraverse *)opBase;
     OpBase *child = op->op.children[0];
-
-    // If its parent is the conditional traverse
-    // Return a matrix instead of 
-    // Option
-    // 1) Merge and return a single matrix
-    // 2) Don't merge and return a list of matrices (#matrics = #threads)
-    if (op->op.parent->type == OPType_CONDITIONAL_TRAVERSE) {
-#ifdef MERGE
-        // TODO: Merge
-#else
-        // TODO: Don't merge
-        if (op->M_list != NULL) {
-            if (op->M_list_cur < op->M_list_cap) {
-                return (Record)(op->M_list[op->M_list_cur++]);
-            } else {
-                return NULL;
-            }
-        }
-#endif
-    }
-    
-    // If its child is the conditional traverse
-    // Take a matrix and bypass conversion
-    if (child->type == OPType_CONDITIONAL_TRAVERSE) {
-        // Deserialize RG_Matrix
-        
-
-    }
 
     /* If we're required to update an edge and have one queued, we can return
      * early. Otherwise, try to get a new pair of source and destination nodes.

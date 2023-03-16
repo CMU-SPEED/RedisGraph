@@ -9,7 +9,7 @@ BASEDIR=/sharedstorage/ykerdcha/code/query_benchmark/script/;
 LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$(realpath $BASEDIR/../deps/GraphBLAS/build/);
 
 EXCEPTION="(^.*orkut_adj.*$)"
-CONTAIN="(^.*(ca-GrQc|facebook)_adj_IA.*$)"
+CONTAIN="(^.*(cit-Patents)_adj_IA.*$)"
 # CONTAIN="(^.*(flickrEdges|roadNet-PA|cit-Patents|ca-GrQc|facebook|oregon1_010526|oregon2_010526|p2p-Gnutella30|email-Enron|as20000102|as-caida20071105|cit-HepTh|email-EuAll|amazon0302|soc-Epinions1|loc-brightkite_edges)_adj_IA.*$)"
 DATE=$(date -d "today" +"%Y%m%d%H%M")
 SERVER_LOG="/sharedstorage/ykerdcha/data/bfs-se-la/e2e/rg_server_$DATE.log"
@@ -24,13 +24,13 @@ unset TMUX;
 rm ./dump.rdb
 
 # for mode in "ORIGINAL" "FUSED_FILTER_AND_TRAVERSE" "CN_ACCUMULATE_SELECT" "CN_MXM_LIKE"
-for mode in "CN_MXM_LIKE"
+for mode in "CN_ACCUMULATE_SELECT" "CN_MXM_LIKE"
 do
     # Make mode
     python3 scripts/mode_change.py "$mode";
     make;
+    # for num_threads in 24;
     for num_threads in 24;
-    # for num_threads in 1 24;
     do
         for file in /sharedstorage/markb1/ktruss_data/unsorted_bin/*;
         do
@@ -97,14 +97,14 @@ do
                         >> ${CLIENT_LOG};
                     echo "</entry>" >> ${CLIENT_LOG};
                 else
-                    # 3-clique
-                    echo "<entry>" >> ${CLIENT_LOG};
-                    echo "$graph_name | 3-clique | $num_threads | $mode" >> ${CLIENT_LOG};
-                    ~/dbms/redis/src/redis-cli \
-                        --raw graph.profile "$graph_name" \
-                        "MATCH (a)-->(b), (b)-->(c) RETURN [a,b,c]" \
-                        >> ${CLIENT_LOG};
-                    echo "</entry>" >> ${CLIENT_LOG};
+                    # # 3-clique
+                    # echo "<entry>" >> ${CLIENT_LOG};
+                    # echo "$graph_name | 3-clique | $num_threads | $mode" >> ${CLIENT_LOG};
+                    # ~/dbms/redis/src/redis-cli \
+                    #     --raw graph.profile "$graph_name" \
+                    #     "MATCH (a)-->(b), (b)-->(c) RETURN [a,b,c]" \
+                    #     >> ${CLIENT_LOG};
+                    # echo "</entry>" >> ${CLIENT_LOG};
 
                     # 4-clique
                     echo "<entry>" >> ${CLIENT_LOG};

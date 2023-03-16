@@ -24,6 +24,7 @@ typedef struct {
 	uint M_list_cap;
 	uint M_list_cur;
 	uint *IM;
+	RG_Matrix prev_M;
 	EdgeTraverseCtx *edge_ctx;  // Edge collection data if the edge needs to be set.
 	RG_MatrixTupleIter iter;    // Iterator over M.
 	int srcNodeIdx;             // Source node index into record.
