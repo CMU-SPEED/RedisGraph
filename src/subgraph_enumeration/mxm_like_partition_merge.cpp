@@ -60,6 +60,8 @@ extern "C" void mxm_like_partition_merge(
 
     simple_tic(tic);
 
+    size_t IM_size = IM.size();
+
 // Loop for each row vector in B
 #pragma omp parallel for num_threads(num_threads)
     for (size_t partition = 0; partition < num_threads; partition++) {
@@ -68,7 +70,7 @@ extern "C" void mxm_like_partition_merge(
             std::vector<size_t> tmp_C;
 
             size_t *M_st, M_size = 0;
-            if (IM.size() != 0) {
+            if (IM_size != 0) {
                 M_st = JM_arr + IM_arr[ib];
                 M_size = IM_arr[ib + 1] - IM_arr[ib];
             }

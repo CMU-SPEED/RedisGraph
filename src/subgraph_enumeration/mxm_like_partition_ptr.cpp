@@ -138,13 +138,14 @@ extern "C" void mxm_like_partition_ptr(size_t ***IC, size_t **IC_size,
     simple_tic(tic);
 
 // Loop for each row vector in B
-// #pragma omp parallel for num_threads(num_threads)
+#pragma omp parallel for num_threads(num_threads)
     for (size_t partition = 0; partition < num_threads; partition++) {
         for (size_t ib = partition_offset[partition];
              ib < partition_offset[partition + 1]; ib++) {
             std::vector<size_t> tmp_C;
 
             size_t *M_st, M_size = 0;
+            // TODO: Is it because of IM.size() -> IM_size
             if (IM_size != 0) {
                 M_st = JM_arr + IM_arr[ib];
                 M_size = IM_arr[ib + 1] - IM_arr[ib];
