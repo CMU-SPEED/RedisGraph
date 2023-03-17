@@ -14,10 +14,10 @@ extern "C" void mxv_like_v1(std::vector<size_t> &Ic, size_t *Im, size_t Im_size,
                             size_t JA_size, size_t *Ib, size_t Ib_size);
 
 extern "C" void mxm_like_partition_merge(
-    std::vector<size_t> &IC, std::vector<size_t> &JC, std::vector<size_t>
-    &IM, std::vector<size_t> &JM, std::vector<size_t> &IA,
-    std::vector<size_t> &JA, std::vector<size_t> &IB, std::vector<size_t>
-    &JB) { size_t num_threads = omp_get_max_threads();
+    std::vector<size_t> &IC, std::vector<size_t> &JC, std::vector<size_t> &IM,
+    std::vector<size_t> &JM, std::vector<size_t> &IA, std::vector<size_t> &JA,
+    std::vector<size_t> &IB, std::vector<size_t> &JB) {
+    size_t num_threads = omp_get_max_threads();
     // printf("mxm_like_partition_merge::num_threads = %d\n", num_threads);
 
     double result = 0.0;
@@ -76,8 +76,7 @@ extern "C" void mxm_like_partition_merge(
             size_t *B_st = JB_arr + IB_arr[ib];
             size_t B_size = IB_arr[ib + 1] - IB_arr[ib];
 
-            mxv_like_v1(tmp_C, M_st, M_size, IA_arr, IA_size, JA_arr,
-            JA_size,
+            mxv_like_v1(tmp_C, M_st, M_size, IA_arr, IA_size, JA_arr, JA_size,
                         B_st, B_size);
 
             // FIXME: We should not copy (unnecessary operations)
@@ -115,11 +114,12 @@ extern "C" void mxm_like_partition_merge(
     printf("Merge %f\n", result * 1e3);
 }
 
-// extern "C" void mxm_like_partition_merge(std::vector<size_t> &IC, std::vector<size_t> &JC,
-//                               std::vector<size_t> &IM, std::vector<size_t> &JM,
-//                               std::vector<size_t> &IA, std::vector<size_t> &JA,
-//                               std::vector<size_t> &IB,
-//                               std::vector<size_t> &JB) {
+// extern "C" void mxm_like_partition_merge(std::vector<size_t> &IC,
+// std::vector<size_t> &JC,
+//                               std::vector<size_t> &IM, std::vector<size_t>
+//                               &JM, std::vector<size_t> &IA,
+//                               std::vector<size_t> &JA, std::vector<size_t>
+//                               &IB, std::vector<size_t> &JB) {
 //     size_t num_threads = omp_get_max_threads();
 
 //     size_t *IM_arr = IM.data();
@@ -161,7 +161,8 @@ extern "C" void mxm_like_partition_merge(
 //             size_t M_size = IM_arr[ib + 1] - IM_arr[ib];
 //             size_t B_size = IB_arr[ib + 1] - IB_arr[ib];
 
-//             mxv_like_v1(tmp_C, M_st, M_size, IA_arr, IA_size, JA_arr, JA_size,
+//             mxv_like_v1(tmp_C, M_st, M_size, IA_arr, IA_size, JA_arr,
+//             JA_size,
 //                         B_st, B_size);
 
 //             // FIXME: We should not copy (unnecessary operations)

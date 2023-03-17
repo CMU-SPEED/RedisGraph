@@ -16,9 +16,9 @@ extern "C" {
 extern "C" void gb_matrix_filter(GrB_Matrix &C, GrB_Matrix M, GrB_Matrix B,
                                  GrB_Matrix A, uint64_t v);
 
-extern "C" void gb_matrix_intersection(GrB_Matrix &C, GrB_Matrix M,
-                                       GrB_Matrix B, GrB_Matrix A,
-                                       std::vector<uint64_t> &v);
+// extern "C" void gb_matrix_intersection(GrB_Matrix &C, GrB_Matrix M,
+//                                        GrB_Matrix B, GrB_Matrix A,
+//                                        std::vector<uint64_t> &v);
 
 extern "C" void gb_mxm_like_partition_merge(GrB_Matrix &C, GrB_Matrix &M,
                                             GrB_Matrix &A, GrB_Matrix &B);
@@ -94,7 +94,7 @@ extern "C" void enumerate_subgraph(uint64_t ***out, uint64_t *out_size,
                 gb_matrix_filter(C, R[i - 1], R_in_O, A, N_P_plus[i].size());
                 break;
             case 2:
-                gb_matrix_intersection(C, R[i - 1], R_in_O, A, N_P_plus[i]);
+                // gb_matrix_intersection(C, R[i - 1], R_in_O, A, N_P_plus[i]);
                 break;
             case 3:
                 gb_mxm_like_partition_merge(C, R[i - 1], R_in_O, A);
