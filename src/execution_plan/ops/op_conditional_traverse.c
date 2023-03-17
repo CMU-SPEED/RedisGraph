@@ -6,8 +6,8 @@
 
 #include "op_conditional_traverse.h"
 
-#include <time.h>
 #include <omp.h>
+#include <time.h>
 
 #include "../../query_ctx.h"
 #include "../../subgraph_enumeration/subgraph_enumeration.hpp"
@@ -58,7 +58,7 @@ static void _populate_filter_matrix(OpCondTraverse *op) {
 // set iterator over result matrix
 // removed filter matrix from original expression
 // clears filter matrix
-void _traverse(OpCondTraverse *op) {
+void _traverse(OpCondTraverse *op, RG_Matrix child_record) {
     // if op->F is null, this is the first time we are traversing
     if (op->F == NULL) {
         // create both filter and result matrices
@@ -81,22 +81,30 @@ void _traverse(OpCondTraverse *op) {
     simple_tic(tic);
 
     GrB_Matrix mask;
-    GrB_Index mask_nrows, mask_ncols;
-    GrB_Matrix_nrows(&mask_nrows, op->M->matrix);
-    GrB_Matrix_ncols(&mask_ncols, op->M->matrix);
-    GrB_Matrix_new(&mask, GrB_BOOL, mask_nrows, mask_ncols);
 
-    // Generate the mask
-    for (uint i = 0; i < op->record_count; i++) {
-        Record r = op->records[i];
-        for (uint j = 0; j < Record_length(r); j++) {
-            if (Record_GetType(r, j) != REC_TYPE_NODE) continue;
-            Node *n = Record_GetNode(r, j);
-            NodeID id = ENTITY_GET_ID(n);
-            GrB_Info info = GrB_Matrix_setElement_BOOL(mask, true, i, id);
-            assert(info == GrB_SUCCESS);
+    if (child_record == NULL) {
+        GrB_Index mask_nrows, mask_ncols;
+        GrB_Matrix_ncols(&mask_ncols, op->M->matrix);
+        GrB_Matrix_new(&mask, GrB_BOOL, op->record_count, mask_ncols);
+
+        // Generate the mask
+        for (uint i = 0; i < op->record_count; i++) {
+            Record r = op->records[i];
+            for (uint j = 0; j < Record_length(r); j++) {
+                if (Record_GetType(r, j) != REC_TYPE_NODE) continue;
+                Node *n = Record_GetNode(r, j);
+                NodeID id = ENTITY_GET_ID(n);
+                GrB_Info info = GrB_Matrix_setElement_BOOL(mask, true, i, id);
+                assert(info == GrB_SUCCESS);
+            }
         }
     }
+
+    else {
+        mask = child_record->matrix;
+    }
+
+    GxB_Matrix_fprint(mask, "mask", GxB_SUMMARY, stdout);
 
     result = simple_toc(tic);
     printf("Mask %f\n", result * 1e3);
@@ -106,52 +114,26 @@ void _traverse(OpCondTraverse *op) {
     size_t num_threads = op->M_list_cap;
     GrB_Matrix *output_list = NULL;
 
-    // TODO: Common Neighbor Traversal
-    // TODO(1): Quick and Dirty GrB (MxM - PLUS_TIMES) and SELECT
+    // Resize 1
+    simple_tic(tic);
 
-    // // TODO(1): Initialize t
-    // GrB_Matrix t;
-    // // Dimension(T) = Dimension(F)
-    // GrB_Index t_nrows, t_ncols;
-    // // GrB_Matrix_nrows(&t_nrows, op->F->matrix);
-    // t_nrows = op->record_count + 1;
-    // GrB_Matrix_ncols(&t_ncols, op->F->matrix);
-    // GrB_Matrix_new(&t, GrB_UINT64, t_nrows, t_ncols);
+    GrB_Index adjacency_matrix_ncols;
+    GrB_Matrix_ncols(&adjacency_matrix_ncols,
+                        op->graph->adjacency_matrix->matrix);
 
-    // TODO(1): Get number of vertices per subgraph
-    if (op->record_count != 0) {
-        uint64_t num_vertices = 0;
-        for (uint j = 0; j < Record_length(op->records[0]); j++) {
-            if (Record_GetType(op->records[0], j) == REC_TYPE_NODE)
-                num_vertices++;
-        }
-     
-        // Resize 1
-        simple_tic(tic);
+    GrB_Matrix A;
+    A = op->graph->adjacency_matrix->matrix;
+    GrB_Matrix_resize(A, adjacency_matrix_ncols, adjacency_matrix_ncols);
 
-        GrB_Index adjacency_matrix_nrows, adjacency_matrix_ncols;
-        GrB_Matrix_nrows(&adjacency_matrix_nrows,
-                         op->graph->adjacency_matrix->matrix);
-        GrB_Matrix_ncols(&adjacency_matrix_ncols,
-                         op->graph->adjacency_matrix->matrix);
-        // adjacency_matrix_ncols = 5242;
-        GrB_Matrix_resize(mask, op->record_count, adjacency_matrix_ncols);
+    result = simple_toc(tic);
+    printf("Prep %f\n", result * 1e3);
 
-        GrB_Matrix A;
-        A = op->graph->adjacency_matrix->matrix;
-        GrB_Matrix_resize(A, adjacency_matrix_ncols, adjacency_matrix_ncols);
-        GrB_Matrix_wait(A, GrB_MATERIALIZE);
-
-        result = simple_toc(tic);
-        printf("Prep %f\n", result * 1e3);
-
-        output_list = (GrB_Matrix *)malloc(sizeof(GrB_Matrix) * num_threads);
-        if (output_list == NULL) {
-            return;
-        }
-
-        _gb_mxm_like_partition(&output_list, &mask, &mask, &A);
+    output_list = (GrB_Matrix *)malloc(sizeof(GrB_Matrix) * num_threads);
+    if (output_list == NULL) {
+        return;
     }
+
+    _gb_mxm_like_partition(&output_list, &mask, &mask, &A);
 
     GrB_Matrix_free(&mask);
 
@@ -173,7 +155,7 @@ void _traverse(OpCondTraverse *op) {
         GrB_Matrix_ncols(&ncols, output_list[i]);
         RG_Matrix_new(&(op->M_list[i]), GrB_BOOL, nrows, ncols);
         op->M_list[i]->matrix = output_list[i];
-        op->IM[i+1] = nrows + op->IM[i];
+        op->IM[i + 1] = nrows + op->IM[i];
     }
 
     // Free output list
@@ -234,6 +216,11 @@ static OpResult CondTraverseInit(OpBase *opBase) {
     return OP_OK;
 }
 
+struct MatrixRecord {
+    RG_Matrix matrix;
+    uint first_src_id;
+};
+
 /* Each call to CondTraverseConsume emits a Record containing the
  * traversal's endpoints and, if required, an edge.
  * Returns NULL once all traversals have been performed. */
@@ -242,36 +229,11 @@ static Record CondTraverseConsume(OpBase *opBase) {
     OpCondTraverse *op = (OpCondTraverse *)opBase;
     OpBase *child = op->op.children[0];
 
-    // If its parent is the conditional traverse
-    // Return a matrix instead of 
-    // Option
-    // 1) Merge and return a single matrix
-    // 2) Don't merge and return a list of matrices (#matrics = #threads)
-    if (op->op.parent->type == OPType_CONDITIONAL_TRAVERSE) {
-#ifdef MERGE
-        // TODO: Merge
-#else
-        // TODO: Don't merge
-        if (op->M_list != NULL) {
-            if (op->M_list_cur < op->M_list_cap) {
-                return (Record)(op->M_list[op->M_list_cur++]);
-            } else {
-                return NULL;
-            }
-        }
-#endif
-    }
-    
-    // If its child is the conditional traverse
-    // Take a matrix and bypass conversion
-    if (child->type == OPType_CONDITIONAL_TRAVERSE) {
-        // Deserialize RG_Matrix
-        
+    printf("%s -> %s (cur) -> %s\n", child->name, op->op.name, op->op.parent->name);
 
-    }
-
-    /* If we're required to update an edge and have one queued, we can return
-     * early. Otherwise, try to get a new pair of source and destination nodes.
+    /* If we're required to update an edge and have one queued, we can
+     * return early. Otherwise, try to get a new pair of source and
+     * destination nodes.
      */
     if (op->r != NULL && op->edge_ctx != NULL &&
         EdgeTraverseCtx_SetEdge(op->edge_ctx, op->r)) {
@@ -281,35 +243,49 @@ static Record CondTraverseConsume(OpBase *opBase) {
     NodeID src_id = INVALID_ENTITY_ID;
     NodeID dest_id = INVALID_ENTITY_ID;
 
-    // clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start);
-
     while (true) {
+        printf("Loop\n");
+
+        // If its parent is CondTraverse
+        // Return a matrix until there is no matrix
+        if (op->op.parent->type == OPType_CONDITIONAL_TRAVERSE) {
+            // op->M_list is not NULL means the list of matrices is generated
+            if (op->M_list != NULL) {
+                if (op->M_list_cur < op->M_list_cap) {
+                    printf("Returned matrix\n");
+                    GxB_Matrix_fprint(op->M_list[op->M_list_cur]->matrix, "Returned matrix", GxB_SUMMARY, stdout);
+                    return (Record)(op->M_list[op->M_list_cur++]);
+                } else {
+                    return NULL;
+                }
+            }
+        }
+
         GrB_Info info =
             RG_MatrixTupleIter_next_UINT64(&op->iter, &src_id, &dest_id, NULL);
-
         // Managed to get a tuple, break.
         if (info == GrB_SUCCESS) {
-#ifdef CN_MXM_LIKE
-            src_id += op->IM[op->M_list_cur-1];
-#endif
+            src_id += op->IM[op->M_list_cur - 1];
+            printf("Break 1\n");
             break;
         }
 
-#ifdef CN_MXM_LIKE
         else if (op->M_list != NULL) {
             if (op->M_list_cur < op->M_list_cap) {
                 // printf("M_list_cur=%d\n", op->M_list_cur);
-                RG_MatrixTupleIter_attach(&op->iter, op->M_list[op->M_list_cur]);
+                RG_MatrixTupleIter_attach(&op->iter,
+                                          op->M_list[op->M_list_cur]);
                 op->M_list_cur++;
-                info = RG_MatrixTupleIter_next_UINT64(&op->iter, &src_id, &dest_id, NULL);
+                info = RG_MatrixTupleIter_next_UINT64(&op->iter, &src_id,
+                                                      &dest_id, NULL);
             }
         }
         // Managed to get a tuple with the new iterator, break.
         if (info == GrB_SUCCESS) {
-            src_id += op->IM[op->M_list_cur-1];
+            src_id += op->IM[op->M_list_cur - 1];
+            printf("Break 2\n");
             break;
         }
-#endif
 
         /* Run out of tuples, try to get new data.
          * Free old records. */
@@ -318,39 +294,63 @@ static Record CondTraverseConsume(OpBase *opBase) {
             OpBase_DeleteRecord(op->records[i]);
         }
 
-        // Ask child operations for data.
-        for (op->record_count = 0; op->record_count < op->record_cap;
-             op->record_count++) {
-            Record childRecord = OpBase_Consume(child);
-            // If the Record is NULL, the child has been depleted.
-            if (!childRecord) break;
-            if (!Record_GetNode(childRecord, op->srcNodeIdx)) {
-                /* The child Record may not contain the source node in scenarios
-                 * like a failed OPTIONAL MATCH. In this case, delete the Record
-                 * and try again. */
-                OpBase_DeleteRecord(childRecord);
-                op->record_count--;
-                continue;
+        // If its child is the conditional traverse
+        // Take a matrix and bypass conversion
+        if (child->type == OPType_CONDITIONAL_TRAVERSE) {
+            printf("CondTraverseConsume - A (in)\n");
+
+            // Deserialize RG_Matrix
+            RG_Matrix child_record = (RG_Matrix)OpBase_Consume(child);
+            // If there is no child_record
+            if (!child_record) {
+                return NULL;
             }
 
-            // Store received record.
-            Record_PersistScalars(childRecord);
-            op->records[op->record_count] = childRecord;
+            printf("Matrix from child\n");
+            GxB_Matrix_fprint(child_record->matrix, "Matrix from child", GxB_SUMMARY, stdout);
+
+            printf("CondTraverseConsume - A (traverse)\n");
+
+            _traverse(op, child_record);
+
+            printf("CondTraverseConsume - A (out)\n");
         }
 
-        // No data.
-        if (op->record_count == 0) return NULL;
+        else {
+            printf("CondTraverseConsume - B (in)\n");
 
-        _traverse(op);
+            // Ask child operations for data.
+            for (op->record_count = 0; op->record_count < op->record_cap;
+                 op->record_count++) {
+                Record childRecord = OpBase_Consume(child);
+                // If the Record is NULL, the child has been depleted.
+                if (!childRecord) break;
+                if (!Record_GetNode(childRecord, op->srcNodeIdx)) {
+                    /* The child Record may not contain the source node in
+                     * scenarios like a failed OPTIONAL MATCH. In this case,
+                     * delete the Record and try again. */
+                    OpBase_DeleteRecord(childRecord);
+                    op->record_count--;
+                    continue;
+                }
+
+                // Store received record.
+                Record_PersistScalars(childRecord);
+                op->records[op->record_count] = childRecord;
+            }
+
+            // No data.
+            if (op->record_count == 0) return NULL;
+
+            printf("CondTraverseConsume - B (traverse)\n");
+
+            _traverse(op, NULL);
+
+            printf("CondTraverseConsume - B (out)\n");
+        }
     }
 
-    // clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &stop);
-    // result += (stop.tv_sec - start.tv_sec) * 1e6 + (stop.tv_nsec -
-    // start.tv_nsec) / 1e3;
-
-    // clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start);
-
-    // printf("src=%d dest=%d\n", src_id, dest_id);
+    printf("Exit\n");
 
     /* Get node from current column. */
     op->r = op->records[src_id];
@@ -368,10 +368,6 @@ static Record CondTraverseConsume(OpBase *opBase) {
         // We're guaranteed to have at least one edge.
         EdgeTraverseCtx_SetEdge(op->edge_ctx, op->r);
     }
-
-    // clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &stop);
-    // result += (stop.tv_sec - start.tv_sec) * 1e6 +
-    //           (stop.tv_nsec - start.tv_nsec) / 1e3;
 
     return OpBase_CloneRecord(op->r);
 }
@@ -438,14 +434,14 @@ static void CondTraverseFree(OpBase *ctx) {
         op->records = NULL;
     }
 
-    if (op->M_list) {
-        for (uint i = 0; i < op->M_list_cap; i++) {
-            RG_Matrix_free(&(op->M_list[i]));
-        }
-        free(op->M_list);
-    }
+    // if (op->M_list) {
+    //     for (uint i = 0; i < op->M_list_cap; i++) {
+    //         RG_Matrix_free(&(op->M_list[i]));
+    //     }
+    //     free(op->M_list);
+    // }
 
-    if (op->IM) {
-        free(op->IM);
-    }
+    // if (op->IM) {
+    //     free(op->IM);
+    // }
 }
