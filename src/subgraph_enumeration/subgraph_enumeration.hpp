@@ -17,3 +17,5 @@ void mxm_like_partition_ptr(size_t ***IC, size_t **IC_size, size_t ***JC,
                             size_t **JC_size, Record **records,
                             uint64_t record_count, GrB_Matrix *A, bool **plan,
                             uint64_t plan_nnz, uint64_t current_record_size);
+
+void cpp_sort(size_t **a_st, size_t **a_en);

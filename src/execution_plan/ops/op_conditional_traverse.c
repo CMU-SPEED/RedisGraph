@@ -186,6 +186,8 @@ OpBase *NewCondTraverseOp(const ExecutionPlan *plan, Graph *g,
     op->iter_i = 0;
     op->iter_j = 0;
 
+    op->prev_R = NULL;
+
     return (OpBase *)op;
 }
 
@@ -228,29 +230,75 @@ static Record CondTraverseConsume(OpBase *opBase) {
             OpBase_DeleteRecord(op->records[i]);
         }
 
-        // TODO: Bypass if your child is ConditionalTraverse
-        // Consume child's records
-        for (op->record_count = 0; op->record_count < op->record_cap;
-             op->record_count++) {
-            Record childRecord = OpBase_Consume(child);
-            // If the Record is NULL, the child has been depleted.
-            if (!childRecord) break;
-            if (!Record_GetNode(childRecord, op->srcNodeIdx)) {
-                /* The child Record may not contain the source node in
-                 * scenarios like a failed OPTIONAL MATCH. In this case,
-                 * delete the Record and try again. */
-                OpBase_DeleteRecord(childRecord);
-                op->record_count--;
-                continue;
-            }
-
-            // Store received record.
-            Record_PersistScalars(childRecord);
-            op->records[op->record_count] = childRecord;
+        if (child->type == OPType_CONDITIONAL_TRAVERSE) {
+            op->prev_R = (CSRRecord *)OpBase_Consume(child);
+            if (op->prev_R == NULL) return NULL;
         }
 
-        // No data.
-        if (op->record_count == 0) return NULL;
+        // If not, create CSR
+        else {
+            // TODO: Bypass if your child is ConditionalTraverse
+            // Consume child's records
+            for (op->record_count = 0; op->record_count < op->record_cap;
+                 op->record_count++) {
+                Record childRecord = OpBase_Consume(child);
+                // If the Record is NULL, the child has been depleted.
+                if (!childRecord) break;
+                if (!Record_GetNode(childRecord, op->srcNodeIdx)) {
+                    /* The child Record may not contain the source node in
+                     * scenarios like a failed OPTIONAL MATCH. In this case,
+                     * delete the Record and try again. */
+                    OpBase_DeleteRecord(childRecord);
+                    op->record_count--;
+                    continue;
+                }
+
+                // Store received record.
+                Record_PersistScalars(childRecord);
+                op->records[op->record_count] = childRecord;
+            }
+
+            // No data.
+            if (op->record_count == 0) return NULL;
+
+            uint64_t current_record_size = 0;
+            for (uint j = 0; j < Record_length(op->records[0]); j++) {
+                if (Record_GetType(op->records[0], j) == REC_TYPE_NODE)
+                    current_record_size++;
+            }
+
+            // Create R (which will be used as a mask)
+            op->prev_R->I_size = op->record_count + 1;
+            op->prev_R->J_size = op->record_count * current_record_size;
+            op->prev_R->I = (size_t *)malloc(sizeof(size_t) * op->prev_R->I_size);
+            if (op->prev_R->I == NULL) {
+                return NULL;
+            }
+            op->prev_R->J = (size_t *)malloc(sizeof(size_t) * op->prev_R->J_size);
+            if (op->prev_R->J == NULL) {
+                return NULL;
+            }
+            op->prev_R->I[0] = 0;
+
+#pragma omp parallel for num_threads(num_threads)
+            for (size_t i = 1; i < op->prev_R->I_size; i++) {
+                op->prev_R->I[i] = i * current_record_size;
+            }
+
+#pragma omp parallel for num_threads(num_threads)
+            for (size_t i = 0; i < op->record_count; i++) {
+                Record r = op->records[i];
+                uint r_len = 0;
+                for (uint j = 0; j < Record_length(r); j++) {
+                    if (Record_GetType(r, j) != REC_TYPE_NODE) continue;
+                    Node *n = Record_GetNode(r, j);
+                    NodeID id = ENTITY_GET_ID(n);
+                    op->prev_R->J[(i * current_record_size) + r_len++] = id;
+                }
+                assert(r_len == current_record_size);
+                cpp_sort(op->prev_R->J + op->prev_R->I[i], op->prev_R->J + op->prev_R->I[i + 1]);
+            }
+        }
 
         // Traverse
         _traverse(op);
@@ -263,8 +311,7 @@ static Record CondTraverseConsume(OpBase *opBase) {
 
     // If your parent is not ConditionalTraverse
     // TODO: Remove if (true)
-    if (true) {
-    // if (op->op.parent->type != OPType_CONDITIONAL_TRAVERSE) {
+    if (op->op.parent->type != OPType_CONDITIONAL_TRAVERSE) {
         while (true) {
             // Loop m
             // If M_list is not out of bound
@@ -334,6 +381,7 @@ static Record CondTraverseConsume(OpBase *opBase) {
         Graph_GetNode(op->graph, dest_id, &destNode);
         Record_AddNode(op->r, op->destNodeIdx, destNode);
 
+        // FIXME: Set EdgeTraverseCtx for all pair of edges
         if (op->edge_ctx) {
             Node *srcNode = Record_GetNode(op->r, op->srcNodeIdx);
             // Collect all appropriate edges connecting the current pair of
@@ -347,9 +395,66 @@ static Record CondTraverseConsume(OpBase *opBase) {
         return OpBase_CloneRecord(op->r);
     }
 
-    // TODO: If your parent is ConditionalTraverse
-    // Then pass through the IC and JC list!
+    else {
+        // TODO: If your parent is ConditionalTraverse
+        // Materializing them and pass through CSR!
+        CSRRecord *output_matrix = (CSRRecord *)malloc(sizeof(CSRRecord));
+        if (output_matrix == NULL) {
+            return NULL;
+        }
 
+        // FIXME: Change it to populate CSRRecord
+        while (op->M_list_cur < op->M_list_cap) {
+            // Loop i
+            // If M_list[m].IC is not out of bound
+            if (op->iter_i < op->IC_size_list[op->M_list_cur] - 1) {
+                // Loop j
+                // If M_list[m].IC[i].JC is not out of bound
+                if (op->iter_j < op->IC_list[op->M_list_cur][op->iter_i + 1]) {
+                    // Source ID = cur_i + M_offset_i
+                    src_id = op->iter_i + op->IM[op->M_list_cur];
+                    // Destination ID = cur_j
+                    dest_id = op->JC_list[op->M_list_cur][op->iter_j];
+
+                    // Advance j
+                    op->iter_j++;
+
+                    // printf("%lu (%lu + %lu) %lu\n", src_id, op->iter_i,
+                    // op->IM[op->M_list_cur], dest_id);
+                    assert(src_id != INVALID_ENTITY_ID);
+                    assert(dest_id != INVALID_ENTITY_ID);
+
+                    // Break the loop
+                    break;
+                }
+                // If M_list[m].IC[i].JC is out of bound
+                else {
+                    // Advance i
+                    op->iter_i++;
+                    // No need to set j = 0 (CSR)
+                    // op->iter_j = 0;
+                }
+            }
+            // If M_list[m].IC is out of bound
+            else {
+                // Free unused IC and JC
+                free(op->IC_list[op->M_list_cur]);
+                free(op->JC_list[op->M_list_cur]);
+
+                // Advance m
+                op->M_list_cur++;
+                // Set i = j = 0
+                op->iter_i = op->iter_j = 0;
+            }
+        }
+
+        free(op->IC_list);
+        free(op->IC_size_list);
+        free(op->JC_list);
+        free(op->JC_size_list);
+
+        return (Record)output_matrix;
+    }
 }
 
 static OpResult CondTraverseReset(OpBase *ctx) {

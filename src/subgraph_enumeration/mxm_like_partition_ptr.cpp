@@ -51,32 +51,32 @@ extern "C" void mxm_like_partition_ptr(size_t ***IC, size_t **IC_size,
     // Building M and B and be merged (but why?)
     // Reduce the number of GET_NODE
 
-    // Build M from records
-    size_t *IM_arr, *JM_arr, IM_size, JM_size;
-    IM_size = record_count + 1;
-    JM_size = record_count * current_record_size;
-    IM_arr = new size_t[IM_size];
-    JM_arr = new size_t[JM_size];
-    IM_arr[0] = 0;
+//     // Build M from records
+//     size_t *IM_arr, *JM_arr, IM_size, JM_size;
+//     IM_size = record_count + 1;
+//     JM_size = record_count * current_record_size;
+//     IM_arr = new size_t[IM_size];
+//     JM_arr = new size_t[JM_size];
+//     IM_arr[0] = 0;
 
-#pragma omp parallel for num_threads(num_threads)
-    for (size_t i = 1; i < IM_size; i++) {
-        IM_arr[i] = i * current_record_size;
-    }
+// #pragma omp parallel for num_threads(num_threads)
+//     for (size_t i = 1; i < IM_size; i++) {
+//         IM_arr[i] = i * current_record_size;
+//     }
 
-#pragma omp parallel for num_threads(num_threads)
-    for (size_t i = 0; i < record_count; i++) {
-        Record r = (*records)[i];
-        uint r_len = 0;
-        for (uint j = 0; j < Record_length(r); j++) {
-            if (Record_GetType(r, j) != REC_TYPE_NODE) continue;
-            Node *n = Record_GetNode(r, j);
-            NodeID id = ENTITY_GET_ID(n);
-            JM_arr[(i * current_record_size) + r_len++] = id;
-        }
-        assert(r_len == current_record_size);
-        std::sort(JM_arr + IM_arr[i], JM_arr + IM_arr[i + 1]);
-    }
+// #pragma omp parallel for num_threads(num_threads)
+//     for (size_t i = 0; i < record_count; i++) {
+//         Record r = (*records)[i];
+//         uint r_len = 0;
+//         for (uint j = 0; j < Record_length(r); j++) {
+//             if (Record_GetType(r, j) != REC_TYPE_NODE) continue;
+//             Node *n = Record_GetNode(r, j);
+//             NodeID id = ENTITY_GET_ID(n);
+//             JM_arr[(i * current_record_size) + r_len++] = id;
+//         }
+//         assert(r_len == current_record_size);
+//         std::sort(JM_arr + IM_arr[i], JM_arr + IM_arr[i + 1]);
+//     }
 
     // Build B from records and plan
     size_t *IB_arr, *JB_arr, IB_size, JB_size;
