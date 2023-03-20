@@ -16,6 +16,7 @@
 typedef struct {
 	size_t *I;
     size_t *J;
+    size_t *V;
     size_t I_size;
     size_t J_size;
 } CSRRecord;

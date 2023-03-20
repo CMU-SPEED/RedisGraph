@@ -1,4 +1,5 @@
 #include <stdint.h>
+
 #include "../src/execution_plan/record.h"
 
 void enumerate_subgraph(uint64_t ***out, uint64_t *out_size, uint64_t **plan,
@@ -18,4 +19,11 @@ void mxm_like_partition_ptr(size_t ***IC, size_t **IC_size, size_t ***JC,
                             uint64_t record_count, GrB_Matrix *A, bool **plan,
                             uint64_t plan_nnz, uint64_t current_record_size);
 
-void cpp_sort(size_t **a_st, size_t **a_en);
+void mxm_like_partition_no_conv(size_t ***IC, size_t **IC_size, size_t ***JC,
+                                size_t **JC_size, size_t *IM, size_t IM_size,
+                                size_t *JM, size_t JM_size, size_t *IB,
+                                size_t IB_size, size_t *JB, size_t JB_size,
+                                GrB_Matrix *A,
+                                uint64_t current_record_size);
+
+void cpp_sort(size_t *a_st, size_t *a_en);

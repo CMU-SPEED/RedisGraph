@@ -16,12 +16,10 @@ extern "C" void mxv_like_v1(std::vector<size_t> &Ic, size_t *Im, size_t Im_size,
                             size_t *IA, size_t IA_size, size_t *JA,
                             size_t JA_size, size_t *Ib, size_t Ib_size);
 
-extern "C" void mxm_like_partition_ptr(size_t ***IC, size_t **IC_size,
-                                       size_t ***JC, size_t **JC_size,
-                                       Record **records, uint64_t record_count,
-                                       GrB_Matrix *A, bool **plan,
-                                       uint64_t plan_nnz,
-                                       uint64_t current_record_size) {
+extern "C" void mxm_like_partition_no_conv(
+    size_t ***IC, size_t **IC_size, size_t ***JC, size_t **JC_size, size_t *IM,
+    size_t IM_size, size_t *JM, size_t JM_size, size_t *IB, size_t IB_size,
+    size_t *JB, size_t JB_size, GrB_Matrix *A, uint64_t current_record_size) {
     size_t num_threads = omp_get_max_threads();
 
     double result = 0.0;
@@ -50,63 +48,8 @@ extern "C" void mxm_like_partition_ptr(size_t ***IC, size_t **IC_size,
 
     // Building M and B and be merged (but why?)
     // Reduce the number of GET_NODE
-
-    // Build M from records
-    size_t *IM_arr, *JM_arr, IM_size, JM_size;
-    IM_size = record_count + 1;
-    JM_size = record_count * current_record_size;
-    IM_arr = new size_t[IM_size];
-    JM_arr = new size_t[JM_size];
-    IM_arr[0] = 0;
-
-#pragma omp parallel for num_threads(num_threads)
-    for (size_t i = 1; i < IM_size; i++) {
-        IM_arr[i] = i * current_record_size;
-    }
-
-#pragma omp parallel for num_threads(num_threads)
-    for (size_t i = 0; i < record_count; i++) {
-        Record r = (*records)[i];
-        uint r_len = 0;
-        for (uint j = 0; j < Record_length(r); j++) {
-            if (Record_GetType(r, j) != REC_TYPE_NODE) continue;
-            Node *n = Record_GetNode(r, j);
-            NodeID id = ENTITY_GET_ID(n);
-            JM_arr[(i * current_record_size) + r_len++] = id;
-        }
-        assert(r_len == current_record_size);
-        std::sort(JM_arr + IM_arr[i], JM_arr + IM_arr[i + 1]);
-    }
-
-    // Build B from records and plan
-    size_t *IB_arr, *JB_arr, IB_size, JB_size;
-    IB_size = record_count + 1;
-    JB_size = record_count * plan_nnz;
-    IB_arr = new size_t[IB_size];
-    JB_arr = new size_t[JB_size];
-    IB_arr[0] = 0;
-
-#pragma omp parallel for num_threads(num_threads)
-    for (size_t i = 1; i < IB_size; i++) {
-        IB_arr[i] = i * plan_nnz;
-    }
-
-#pragma omp parallel for num_threads(num_threads)
-    for (size_t i = 0; i < record_count; i++) {
-        Record r = (*records)[i];
-        uint r_len = 0, actual_len = 0;
-        for (uint j = 0; j < Record_length(r); j++) {
-            if (Record_GetType(r, j) != REC_TYPE_NODE) continue;
-            Node *n = Record_GetNode(r, j);
-            NodeID id = ENTITY_GET_ID(n);
-            if ((*plan)[r_len]) {
-                JB_arr[(i * plan_nnz) + actual_len++] = id;
-            }
-            r_len++;
-        }
-        assert(actual_len == plan_nnz);
-        std::sort(JB_arr + IB_arr[i], JB_arr + IB_arr[i + 1]);
-    }
+    size_t *IM_arr = IM, *JM_arr = JM;
+    size_t *IB_arr = IB, *JB_arr = JB;
 
     result = simple_toc(tic);
     printf("ConvB %f\n", result * 1e3);
