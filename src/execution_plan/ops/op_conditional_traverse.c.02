@@ -1,18 +1,21 @@
+/*start_query_plan*/
+#define QPLAN_ID 0
+/*end_query_plan*/
+
 /*
  * Copyright Redis Ltd. 2018 - present
  * Licensed under your choice of the Redis Source Available License 2.0 (RSALv2)
  * or the Server Side Public License v1 (SSPLv1).
  */
 
-#include "op_conditional_traverse.h"
-
-#include <time.h>
 #include <omp.h>
+#include <time.h>
 
 #include "../../query_ctx.h"
 #include "../../subgraph_enumeration/subgraph_enumeration.hpp"
 #include "../../util/simple_timer.h"
 #include "RG.h"
+#include "op_conditional_traverse.h"
 #include "shared/print_functions.h"
 
 // default number of records to accumulate before traversing
@@ -72,40 +75,58 @@ void _traverse(OpCondTraverse *op) {
     double result = 0.0;
     double tic[2];
 
-    // Mask creation
-    // custom mxm
+    GrB_Matrix M, S;
+    printf("Mask and Selector Generation: ");
     simple_tic(tic);
+    {
+        GrB_Index M_nrows, M_ncols;
+        GrB_Matrix_nrows(&M_nrows, op->M->matrix);
+        GrB_Matrix_ncols(&M_ncols, op->M->matrix);
+        GrB_Matrix_new(&M, GrB_BOOL, M_nrows, M_ncols);
+        GrB_Matrix_new(&S, GrB_BOOL, M_nrows, M_ncols);
 
-    GrB_Matrix mask;
-    GrB_Index mask_nrows, mask_ncols;
-    GrB_Matrix_nrows(&mask_nrows, op->M->matrix);
-    GrB_Matrix_ncols(&mask_ncols, op->M->matrix);
-    GrB_Matrix_new(&mask, GrB_BOOL, mask_nrows, mask_ncols);
+        // Mask Generation
+        GrB_Info info;
+        for (uint64_t i = 0; i < op->record_count; i++) {
+            Record r = op->records[i];
+            // uint64_t v_idx = 0;
+            for (uint64_t j = 0; j < Record_length(r); j++) {
+                if (Record_GetType(r, j) != REC_TYPE_NODE) continue;
+                Node *n = Record_GetNode(r, j);
+                NodeID id = ENTITY_GET_ID(n);
 
-    // Generate the mask
-    for (uint i = 0; i < op->record_count; i++) {
-        Record r = op->records[i];
-        for (uint j = 0; j < Record_length(r); j++) {
-            if (Record_GetType(r, j) != REC_TYPE_NODE) continue;
-            Node *n = Record_GetNode(r, j);
-            NodeID id = ENTITY_GET_ID(n);
-            GrB_Info info = GrB_Matrix_setElement_BOOL(mask, true, i, id);
-            assert(info == GrB_SUCCESS);
+                info = GrB_Matrix_setElement_BOOL(M, true, i, id);
+                assert(info == GrB_SUCCESS);
+
+                // // Check the plan to generate S
+                // if (QPLAN[QPLAN_ID][op->srcNodeIdx][v_idx]) {
+                //     info = GrB_Matrix_setElement_BOOL(S, true, i, id);
+                //     assert(info == GrB_SUCCESS);
+                // }
+
+                // v_idx++;
+            }
         }
+
+        // Selector Generation
+        _populate_filter_matrix(op);
     }
-
     result = simple_toc(tic);
-    printf("Mask %f\n", result * 1e3);
-
-    // populate filter matrix
-    _populate_filter_matrix(op);
-
-    GrB_Info info =
-        GrB_mxm(op->M->matrix, mask, GrB_NULL, GrB_LOR_LAND_SEMIRING_BOOL,
+    printf("%f ms\n", result * 1e3);
+    
+    printf("Enumeration: ");
+    simple_tic(tic);
+    {
+        GrB_Info info =
+        GrB_mxm(op->M->matrix, M, GrB_NULL, GrB_LOR_LAND_SEMIRING_BOOL,
                 op->F->matrix, op->graph->adjacency_matrix->matrix, GrB_DESC_C);
-    assert(info == GrB_SUCCESS);
+        assert(info == GrB_SUCCESS);
+    }
+    result = simple_toc(tic);
+    printf("%f ms\n", result * 1e3);
 
-    GrB_Matrix_free(&mask);
+    GrB_Matrix_free(&M);
+    GrB_Matrix_free(&S);
 
     RG_MatrixTupleIter_attach(&op->iter, op->M);
 }

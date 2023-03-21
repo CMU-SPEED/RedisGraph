@@ -40,8 +40,6 @@ OpBase *NewProjectOp(const ExecutionPlan *plan, AR_ExpNode **exps) {
         array_append(op->record_offsets, record_idx);
     }
 
-    op->time = 0.0;
-
     return (OpBase *)op;
 }
 
@@ -75,16 +73,16 @@ static Record ProjectConsume(OpBase *opBase) {
         //  * TODO This is a rare case; the logic of when to persist can be
         //  improved.  */
         if (!(v.type & SI_GRAPHENTITY)) SIValue_Persist(&v);
-        
+
         // FIXME: Why with Record_Add my new performance is worse? (Reasonable -
         // more instructions) But my old performance is better!?
 
         // double tic[2], result;
         // simple_tic(tic);
-		// printf("%d (type=%d)\n", rec_idx, v.type);
+        // printf("%d (type=%d)\n", rec_idx, v.type);
 
         Record_Add(op->projection, rec_idx, v);
-        
+
         // op->time += simple_toc(tic);
 
         // /* If the value was a graph entity with its own allocation, as with a
@@ -120,8 +118,6 @@ static OpBase *ProjectClone(const ExecutionPlan *plan, const OpBase *opBase) {
 
 static void ProjectFree(OpBase *ctx) {
     OpProject *op = (OpProject *)ctx;
-
-    printf("Projection %f\n", op->time * 1e3);
 
     if (op->exps) {
         for (uint i = 0; i < op->exp_count; i++) AR_EXP_Free(op->exps[i]);

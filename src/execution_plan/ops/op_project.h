@@ -19,8 +19,6 @@ typedef struct {
 	uint *record_offsets;           // Record IDs corresponding to each projection (including order exps).
 	bool singleResponse;            // When no child operations, return NULL after a first response.
 	uint exp_count;                 // Number of projected expressions.
-	double time;
-	CSRRecord *prev_R;
 } OpProject;
 
 OpBase *NewProjectOp(const ExecutionPlan *plan, AR_ExpNode **exps);

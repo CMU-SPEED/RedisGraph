@@ -13,8 +13,22 @@
 #include "op.h"
 #include "shared/traverse_functions.h"
 
+// const int QPLAN[6][4][4] = {
+//     // 3-chain
+//     {{0, 0, 0, 0}, {1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 0, 0}},
+//     // 3-clique
+//     {{0, 0, 0, 0}, {1, 0, 0, 0}, {1, 1, 0, 0}, {0, 0, 0, 0}},
+//     // 4-chain
+//     {{0, 0, 0, 0}, {1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}},
+//     // 4-loop
+//     {{0, 0, 0, 0}, {1, 0, 0, 0}, {0, 1, 0, 0}, {1, 0, 1, 0}},
+//     // 4-diamond
+//     {{0, 0, 0, 0}, {1, 0, 0, 0}, {1, 1, 0, 0}, {0, 1, 1, 0}},
+//     // 4-clique
+//     {{0, 0, 0, 0}, {1, 0, 0, 0}, {1, 1, 0, 0}, {1, 1, 1, 0}}};
+
 typedef struct {
-	size_t *I;
+    size_t *I;
     size_t *J;
     size_t I_size;
     size_t J_size;
@@ -31,16 +45,13 @@ typedef struct {
     uint M_list_cap;
     uint M_list_cur;
     uint *IM;
-
     size_t **IC_list;
     size_t **JC_list;
     size_t *IC_size_list;
     size_t *JC_size_list;
     size_t iter_i;
     size_t iter_j;
-
-	CSRRecord *prev_R;
-
+    CSRRecord *prev_R;
     EdgeTraverseCtx
         *edge_ctx;  // Edge collection data if the edge needs to be set.
     RG_MatrixTupleIter iter;  // Iterator over M.

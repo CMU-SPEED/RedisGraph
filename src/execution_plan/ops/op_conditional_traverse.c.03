@@ -1,3 +1,21 @@
+/*start_query_plan*/
+#define QPLAN_ID 0
+/*end_query_plan*/
+
+const int QPLAN[6][4][4] = {
+    // 0 - 3-chain
+    {{0, 0, 0, 0}, {1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 0, 0}},
+    // 1 - 3-clique
+    {{0, 0, 0, 0}, {1, 0, 0, 0}, {1, 1, 0, 0}, {0, 0, 0, 0}},
+    // 2 - 4-chain
+    {{0, 0, 0, 0}, {1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}},
+    // 3 - 4-loop
+    {{0, 0, 0, 0}, {1, 0, 0, 0}, {0, 1, 0, 0}, {1, 0, 1, 0}},
+    // 4 - 4-diamond
+    {{0, 0, 0, 0}, {1, 0, 0, 0}, {1, 1, 0, 0}, {0, 1, 1, 0}},
+    // 5 - 4-clique
+    {{0, 0, 0, 0}, {1, 0, 0, 0}, {1, 1, 0, 0}, {1, 1, 1, 0}}};
+
 /*
  * Copyright Redis Ltd. 2018 - present
  * Licensed under your choice of the Redis Source Available License 2.0 (RSALv2)
@@ -67,96 +85,66 @@ void _traverse(OpCondTraverse *op) {
         AlgebraicExpression_Optimize(&op->ae);
     }
 
-    // #define ORIGINAL
     double result = 0.0;
     double tic[2];
 
-    // Mask creation
-    // custom mxm
+    GrB_Matrix M, S;
+    printf("Mask and Selector Generation: ");
     simple_tic(tic);
+    {
+        GrB_Index M_nrows, M_ncols;
+        GrB_Matrix_nrows(&M_nrows, op->M->matrix);
+        GrB_Matrix_ncols(&M_ncols, op->M->matrix);
+        GrB_Matrix_new(&M, GrB_BOOL, M_nrows, M_ncols);
+        GrB_Matrix_new(&S, GrB_BOOL, M_nrows, M_ncols);
 
-    GrB_Matrix mask;
-    GrB_Index mask_nrows, mask_ncols;
-    GrB_Matrix_nrows(&mask_nrows, op->M->matrix);
-    GrB_Matrix_ncols(&mask_ncols, op->M->matrix);
-    GrB_Matrix_new(&mask, GrB_BOOL, mask_nrows, mask_ncols);
+        // Mask Generation
+        GrB_Info info;
+        for (uint64_t i = 0; i < op->record_count; i++) {
+            Record r = op->records[i];
+            uint64_t v_idx = 0;
+            for (uint64_t j = 0; j < Record_length(r); j++) {
+                if (Record_GetType(r, j) != REC_TYPE_NODE) continue;
+                Node *n = Record_GetNode(r, j);
+                NodeID id = ENTITY_GET_ID(n);
 
-    // Generate the mask
-    for (uint i = 0; i < op->record_count; i++) {
-        Record r = op->records[i];
-        for (uint j = 0; j < Record_length(r); j++) {
-            if (Record_GetType(r, j) != REC_TYPE_NODE) continue;
-            Node *n = Record_GetNode(r, j);
-            NodeID id = ENTITY_GET_ID(n);
-            GrB_Info info = GrB_Matrix_setElement_BOOL(mask, true, i, id);
-            assert(info == GrB_SUCCESS);
+                info = GrB_Matrix_setElement_BOOL(M, true, i, id);
+                assert(info == GrB_SUCCESS);
+
+                // Check the plan to generate S
+                if (QPLAN[QPLAN_ID][op->destNodeIdx][v_idx]) {
+                    info = GrB_Matrix_setElement_BOOL(S, true, i, id);
+                    assert(info == GrB_SUCCESS);
+                }
+
+                v_idx++;
+            }
         }
     }
-
     result = simple_toc(tic);
-    printf("Mask %f\n", result * 1e3);
+    printf("%f ms\n", result * 1e3);
 
-    // TODO: Create filter matrix for non-chains
-    // FIXME: This is only for cliques
-
-    // TODO: Common Neighbor Traversal
-    // TODO(1): Quick and Dirty GrB (MxM - PLUS_TIMES) and SELECT
-
-    // TODO(1): Initialize t
-    GrB_Matrix t;
-    // Dimension(T) = Dimension(F)
-    GrB_Index t_nrows, t_ncols;
-    GrB_Matrix_nrows(&t_nrows, op->F->matrix);
-    GrB_Matrix_ncols(&t_ncols, op->F->matrix);
-    GrB_Matrix_new(&t, GrB_UINT64, t_nrows, t_ncols);
-
-    // TODO(1): Get number of vertices per subgraph
-    if (op->record_count != 0) {
-        uint64_t num_vertices = 0;
-        for (uint j = 0; j < Record_length(op->records[0]); j++) {
+    printf("Enumeration: ");
+    simple_tic(tic);
+    {
+        uint64_t nV = 0;
+        uint64_t v_idx = 0;
+        for (uint64_t j = 0; j < Record_length(op->records[0]); j++) {
             if (Record_GetType(op->records[0], j) == REC_TYPE_NODE)
-                num_vertices++;
+                if (QPLAN[QPLAN_ID][op->destNodeIdx][v_idx]) {
+                    nV++;
+                }
+            v_idx++;
         }
-        // printf("num_vertices: %lu\n", num_vertices);
 
-        // // Create F
-        // GrB_Matrix F;
-        // GrB_Matrix_new(&t, GrB_UINT64, t_nrows, t_ncols);
-        // TODO(1): Introducing the set inclusion function
-        // // FIXME
-        // GrB_Matrix_select_UINT64(F, GrB_NULL, GrB_NULL, OP_IN, mask,
-        // set[num_vertices - 1], GrB_NULL);
-
-        // GxB_Matrix_fprint(mask, "S", GxB_SUMMARY, stdout);
-        // GxB_Matrix_fprint(op->graph->adjacency_matrix->matrix, "A",
-        // GxB_SUMMARY, stdout);
-
-        simple_tic(tic);
-
-        _gb_matrix_filter(&(op->M->matrix), &mask, &mask,
-                          &(op->graph->adjacency_matrix->matrix), num_vertices);
-
-        result = simple_toc(tic);
-        printf("Enum %f\n", result * 1e3);
-
-        // // TODO(1): Ensure that the output is integer (not boolean)
-        // GrB_Info info = GrB_mxm(
-        //     t, mask, GrB_NULL, GrB_PLUS_TIMES_SEMIRING_UINT64, mask,
-        //     op->graph->adjacency_matrix->matrix, GrB_DESC_C);
-        // assert(info == GrB_SUCCESS);
-
-        // GxB_Matrix_fprint(t, "TEMP", GxB_SUMMARY, stdout);
-
-        // // TODO(1): Ensure t and num_vertices
-        // info = GrB_Matrix_select_UINT64(op->M->matrix, GrB_NULL, GrB_NULL,
-        //                                 GrB_VALUEEQ_UINT64, t, num_vertices,
-        //                                 GrB_NULL);
-        // assert(info == GrB_SUCCESS);
-
-        // GxB_Matrix_fprint(op->M->matrix, "OUT", GxB_SUMMARY, stdout);
+        _gb_matrix_filter(&(op->M->matrix), &M, &S,
+                          &(op->graph->adjacency_matrix->matrix), nV);
     }
+    result = simple_toc(tic);
+    printf("%f ms\n", result * 1e3);
 
-    GrB_Matrix_free(&mask);
+    GrB_Matrix_free(&M);
+    GrB_Matrix_free(&S);
 
     RG_MatrixTupleIter_attach(&op->iter, op->M);
 }
@@ -231,8 +219,6 @@ static Record CondTraverseConsume(OpBase *opBase) {
     NodeID src_id = INVALID_ENTITY_ID;
     NodeID dest_id = INVALID_ENTITY_ID;
 
-    // clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start);
-
     while (true) {
         GrB_Info info =
             RG_MatrixTupleIter_next_UINT64(&op->iter, &src_id, &dest_id, NULL);
@@ -275,14 +261,6 @@ static Record CondTraverseConsume(OpBase *opBase) {
         _traverse(op);
     }
 
-    // clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &stop);
-    // result += (stop.tv_sec - start.tv_sec) * 1e6 + (stop.tv_nsec -
-    // start.tv_nsec) / 1e3;
-
-    // clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start);
-
-    // printf("src=%d dest=%d\n", src_id, dest_id);
-
     /* Get node from current column. */
     op->r = op->records[src_id];
     // Populate the destination node and add it to the Record.
@@ -299,10 +277,6 @@ static Record CondTraverseConsume(OpBase *opBase) {
         // We're guaranteed to have at least one edge.
         EdgeTraverseCtx_SetEdge(op->edge_ctx, op->r);
     }
-
-    // clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &stop);
-    // result += (stop.tv_sec - start.tv_sec) * 1e6 +
-    //           (stop.tv_nsec - start.tv_nsec) / 1e3;
 
     return OpBase_CloneRecord(op->r);
 }
