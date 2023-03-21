@@ -75,13 +75,16 @@ static Record ProjectConsume(OpBase *opBase) {
         //  * TODO This is a rare case; the logic of when to persist can be
         //  improved.  */
         if (!(v.type & SI_GRAPHENTITY)) SIValue_Persist(&v);
+        
         // FIXME: Why with Record_Add my new performance is worse? (Reasonable -
         // more instructions) But my old performance is better!?
-        double tic[2], result;
-        simple_tic(tic);
-		printf("%d (type=%d)\n", rec_idx, v.type);
+
+        // double tic[2], result;
+        // simple_tic(tic);
+		// printf("%d (type=%d)\n", rec_idx, v.type);
         Record_Add(op->projection, rec_idx, v);
-        op->time += simple_toc(tic);
+        // op->time += simple_toc(tic);
+
         // /* If the value was a graph entity with its own allocation, as with a
         // query like:
         //  * MATCH p = (src) RETURN nodes(p)[0]
