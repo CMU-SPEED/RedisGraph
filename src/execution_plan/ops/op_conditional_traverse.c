@@ -22,6 +22,8 @@ const int QPLAN[6][4][4] = {
  * or the Server Side Public License v1 (SSPLv1).
  */
 
+#include "op_conditional_traverse.h"
+
 #include <omp.h>
 #include <time.h>
 
@@ -29,7 +31,6 @@ const int QPLAN[6][4][4] = {
 #include "../../subgraph_enumeration/subgraph_enumeration.hpp"
 #include "../../util/simple_timer.h"
 #include "RG.h"
-#include "op_conditional_traverse.h"
 #include "shared/print_functions.h"
 
 // default number of records to accumulate before traversing
@@ -64,12 +65,11 @@ static void _populate_filter_matrix(OpCondTraverse *op) {
     }
 }
 
-// evaluate algebraic expression:
-// prepends filter matrix as the left most operand
-// perform multiplications
-// set iterator over result matrix
-// removed filter matrix from original expression
-// clears filter matrix
+// DO NOT CHANGE
+/*start_mode_configuration*/
+#define CN_MXM_LIKE
+/*end_mode_configuration*/
+
 void _traverse(OpCondTraverse *op) {
     // if op->F is null, this is the first time we are traversing
     if (op->F == NULL) {
@@ -88,95 +88,78 @@ void _traverse(OpCondTraverse *op) {
     double result = 0.0;
     double tic[2];
 
-    GrB_Matrix M, S, A;
-    printf("Mask and Selector Generation: ");
+    // For outputs
+    size_t **IC_list = NULL, *IC_size_list = NULL;
+    size_t **JC_list = NULL, *JC_size_list = NULL;
+
+    size_t num_threads = op->M_list_cap;
+    bool *plan = NULL;
+    uint64_t plan_size = 0, current_record_size = 0;
+    uint64_t num_vertices = 0;
+    printf("Preparation: ");
     simple_tic(tic);
     {
-        GrB_Index M_nrows, M_ncols;
-        GrB_Matrix_nrows(&M_nrows, op->M->matrix);
-        GrB_Matrix_ncols(&M_ncols, op->M->matrix);
-        GrB_Matrix_new(&M, GrB_BOOL, M_nrows, M_ncols);
-        GrB_Matrix_new(&S, GrB_BOOL, M_nrows, M_ncols);
-
-        // Mask Generation
-        GrB_Info info;
-        for (uint64_t i = 0; i < op->record_count; i++) {
-            Record r = op->records[i];
-            uint64_t v_idx = 0;
-            for (uint64_t j = 0; j < Record_length(r); j++) {
-                if (Record_GetType(r, j) != REC_TYPE_NODE) continue;
-                Node *n = Record_GetNode(r, j);
-                NodeID id = ENTITY_GET_ID(n);
-
-                info = GrB_Matrix_setElement_BOOL(M, true, i, id);
-                assert(info == GrB_SUCCESS);
-
-                // Check the plan to generate S
-                if (QPLAN[QPLAN_ID][op->destNodeIdx][v_idx]) {
-                    info = GrB_Matrix_setElement_BOOL(S, true, i, id);
-                    assert(info == GrB_SUCCESS);
-                }
-
-                v_idx++;
-            }
+        for (uint j = 0; j < Record_length(op->records[0]); j++) {
+            if (Record_GetType(op->records[0], j) == REC_TYPE_NODE)
+                num_vertices++;
         }
 
-        GrB_Index adjacency_matrix_nrows, adjacency_matrix_ncols;
-        A = op->graph->adjacency_matrix->matrix;
-        GrB_Matrix_nrows(&adjacency_matrix_nrows,
-                         op->graph->adjacency_matrix->matrix);
-        GrB_Matrix_ncols(&adjacency_matrix_ncols,
-                         op->graph->adjacency_matrix->matrix);
-
-        GrB_Matrix_resize(M, op->record_count, adjacency_matrix_ncols);
-        GrB_Matrix_resize(S, op->record_count, adjacency_matrix_ncols);
-        GrB_Matrix_resize(A, adjacency_matrix_ncols, adjacency_matrix_ncols);
-    }
-    result = simple_toc(tic);
-    printf("%f ms\n", result * 1e3);
-
-    uint64_t num_threads = op->M_list_cap;
-    GrB_Matrix *output_list = NULL;
-    printf("Enumeration: ");
-    simple_tic(tic);
-    {
-        output_list = (GrB_Matrix *)malloc(sizeof(GrB_Matrix) * num_threads);
-        if (output_list == NULL) {
+        IC_list = (size_t **)malloc(sizeof(size_t *) * num_threads);
+        if (IC_list == NULL) {
+            return;
+        }
+        IC_size_list = (size_t *)malloc(sizeof(size_t) * num_threads);
+        if (IC_size_list == NULL) {
+            return;
+        }
+        JC_list = (size_t **)malloc(sizeof(size_t *) * num_threads);
+        if (JC_list == NULL) {
+            return;
+        }
+        JC_size_list = (size_t *)malloc(sizeof(size_t) * num_threads);
+        if (JC_size_list == NULL) {
             return;
         }
 
-        _gb_mxm_like_partition(&output_list, &M, &S, &A);
+        current_record_size = num_vertices;
+        plan = (bool *)malloc(sizeof(bool) * num_vertices);
+        if (plan == NULL) {
+            return;
+        }
+        for (size_t i = 0; i < num_vertices; i++) {
+            // For clique
+            plan[i] = QPLAN[QPLAN_ID][op->destNodeIdx][i];
+            if (plan[i]) plan_size++;
+        }
     }
     result = simple_toc(tic);
     printf("%f ms\n", result * 1e3);
 
-    GrB_Matrix_free(&M);
-    GrB_Matrix_free(&S);
-
-    op->M_list = (RG_Matrix *)malloc(sizeof(RG_Matrix) * num_threads);
-    if (op->M_list == NULL) {
-        return;
+    printf("Enumeration: ");
+    simple_tic(tic);
+    {
+        mxm_like_partition_ptr(&IC_list, &IC_size_list, &JC_list, &JC_size_list,
+                               &op->records, op->record_count,
+                               &(op->graph->adjacency_matrix->matrix), &plan,
+                               plan_size, current_record_size);
     }
+    result = simple_toc(tic);
+    printf("%f ms\n", result * 1e3);
+
+    // Transfer to the Consume method
+    op->IC_list = IC_list;
+    op->IC_size_list = IC_size_list;
+    op->JC_list = JC_list;
+    op->JC_size_list = JC_size_list;
 
     op->IM = (uint *)malloc(sizeof(uint) * (num_threads + 1));
-    if (op->M_list == NULL) {
+    if (op->IM == NULL) {
         return;
     }
+
     op->IM[0] = 0;
-
-    // M_list -> output_list
     for (size_t i = 0; i < num_threads; i++) {
-        GrB_Index nrows, ncols;
-        GrB_Matrix_nrows(&nrows, output_list[i]);
-        GrB_Matrix_ncols(&ncols, output_list[i]);
-        RG_Matrix_new(&(op->M_list[i]), GrB_BOOL, nrows, ncols);
-        op->M_list[i]->matrix = output_list[i];
-        op->IM[i + 1] = nrows + op->IM[i];
-    }
-
-    // Free output list
-    if (output_list != NULL) {
-        free(output_list);
+        op->IM[i + 1] = IC_size_list[i] - 1 + op->IM[i];
     }
 }
 
@@ -217,6 +200,13 @@ OpBase *NewCondTraverseOp(const ExecutionPlan *plan, Graph *g,
     op->M_list = NULL;
     op->IM = NULL;
 
+    op->IC_list = NULL;
+    op->JC_list = NULL;
+    op->IC_size_list = NULL;
+    op->JC_size_list = NULL;
+    op->iter_i = 0;
+    op->iter_j = 0;
+
     return (OpBase *)op;
 }
 
@@ -250,46 +240,25 @@ static Record CondTraverseConsume(OpBase *opBase) {
     NodeID src_id = INVALID_ENTITY_ID;
     NodeID dest_id = INVALID_ENTITY_ID;
 
-    while (true) {
-        GrB_Info info =
-            RG_MatrixTupleIter_next_UINT64(&op->iter, &src_id, &dest_id, NULL);
-
-        // Managed to get a tuple, break.
-        if (info == GrB_SUCCESS) {
-            src_id += op->IM[op->M_list_cur - 1];
-            break;
-        } else if (op->M_list != NULL) {
-            if (op->M_list_cur < op->M_list_cap) {
-                RG_MatrixTupleIter_attach(&op->iter,
-                                          op->M_list[op->M_list_cur]);
-                op->M_list_cur++;
-                info = RG_MatrixTupleIter_next_UINT64(&op->iter, &src_id,
-                                                      &dest_id, NULL);
-            }
-        }
-        // Managed to get a tuple with the new iterator, break.
-        if (info == GrB_SUCCESS) {
-            src_id += op->IM[op->M_list_cur - 1];
-            break;
-        }
-
-        /* Run out of tuples, try to get new data.
-         * Free old records. */
+    // If the operator didn't apply traverse()
+    // Grab inputs and traverse()
+    if (op->IC_list == NULL) {
+        // Free old records
         op->r = NULL;
         for (uint i = 0; i < op->record_count; i++) {
             OpBase_DeleteRecord(op->records[i]);
         }
 
-        // Ask child operations for data.
+        // Consume child's records
         for (op->record_count = 0; op->record_count < op->record_cap;
              op->record_count++) {
             Record childRecord = OpBase_Consume(child);
             // If the Record is NULL, the child has been depleted.
             if (!childRecord) break;
             if (!Record_GetNode(childRecord, op->srcNodeIdx)) {
-                /* The child Record may not contain the source node in scenarios
-                 * like a failed OPTIONAL MATCH. In this case, delete the Record
-                 * and try again. */
+                /* The child Record may not contain the source node in
+                 * scenarios like a failed OPTIONAL MATCH. In this case,
+                 * delete the Record and try again. */
                 OpBase_DeleteRecord(childRecord);
                 op->record_count--;
                 continue;
@@ -303,11 +272,70 @@ static Record CondTraverseConsume(OpBase *opBase) {
         // No data.
         if (op->record_count == 0) return NULL;
 
+        // Traverse
         _traverse(op);
+
+        assert(op->IC_list != NULL);
+        assert(op->JC_list != NULL);
+        assert(op->IC_size_list != NULL);
+        assert(op->JC_size_list != NULL);
     }
+
+    while (true) {
+        // Loop m
+        // If M_list is not out of bound
+        if (op->M_list_cur < op->M_list_cap) {
+            // Loop i
+            // If M_list[m].IC is not out of bound
+            if (op->iter_i < op->IC_size_list[op->M_list_cur] - 1) {
+                // Loop j
+                // If M_list[m].IC[i].JC is not out of bound
+                if (op->iter_j < op->IC_list[op->M_list_cur][op->iter_i + 1]) {
+                    // Source ID = cur_i + M_offset_i
+                    src_id = op->iter_i + op->IM[op->M_list_cur];
+                    // Destination ID = cur_j
+                    dest_id = op->JC_list[op->M_list_cur][op->iter_j];
+
+                    // Advance j
+                    op->iter_j++;
+
+                    // printf("%lu (%lu + %lu) %lu\n", src_id, op->iter_i,
+                    // op->IM[op->M_list_cur], dest_id);
+
+                    assert(src_id != INVALID_ENTITY_ID);
+                    assert(dest_id != INVALID_ENTITY_ID);
+
+                    // Break the loop
+                    break;
+                }
+                // If M_list[m].IC[i].JC is out of bound
+                else {
+                    // Advance i
+                    op->iter_i++;
+                    // No need to set j = 0 (CSR)
+                    // op->iter_j = 0;
+                }
+            }
+            // If M_list[m].IC is out of bound
+            else {
+                // Advance m
+                op->M_list_cur++;
+                // Set i = j = 0
+                op->iter_i = op->iter_j = 0;
+            }
+        }
+        // If M_list is out of bound
+        else {
+            return NULL;
+        }
+    }
+
+    assert(src_id != INVALID_ENTITY_ID);
+    assert(dest_id != INVALID_ENTITY_ID);
 
     /* Get node from current column. */
     op->r = op->records[src_id];
+
     // Populate the destination node and add it to the Record.
     Node destNode = GE_NEW_NODE();
     Graph_GetNode(op->graph, dest_id, &destNode);
