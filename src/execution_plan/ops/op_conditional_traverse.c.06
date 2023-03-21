@@ -64,11 +64,6 @@ static void _populate_filter_matrix(OpCondTraverse *op) {
     }
 }
 
-// DO NOT CHANGE
-/*start_mode_configuration*/
-#define CN_MXM_LIKE
-/*end_mode_configuration*/
-
 void _traverse(OpCondTraverse *op) {
     // if op->F is null, this is the first time we are traversing
     if (op->F == NULL) {

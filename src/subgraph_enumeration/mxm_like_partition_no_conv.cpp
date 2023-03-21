@@ -22,11 +22,6 @@ extern "C" void mxm_like_partition_no_conv(
     size_t *JB, size_t JB_size, GrB_Matrix *A) {
     size_t num_threads = omp_get_max_threads();
 
-    double result = 0.0;
-    double tic[2];
-
-    simple_tic(tic);
-
     // Build A from GraphBLAS Matrix A
     size_t *IA_arr, *JA_arr, IA_size, JA_size;
 
@@ -51,11 +46,6 @@ extern "C" void mxm_like_partition_no_conv(
     size_t *IM_arr = IM, *JM_arr = JM;
     size_t *IB_arr = IB, *JB_arr = JB;
 
-    result = simple_toc(tic);
-    printf("ConvB %f\n", result * 1e3);
-
-    simple_tic(tic);
-
     // Create partitions
     std::vector<std::vector<size_t> *> partitioned_IC(num_threads);
     std::vector<std::vector<size_t> *> partitioned_JC(num_threads);
@@ -75,11 +65,6 @@ extern "C" void mxm_like_partition_no_conv(
         partitioned_JC[t] = new std::vector<size_t>();
     }
 
-    result = simple_toc(tic);
-    printf("Part %f\n", result * 1e3);
-
-    simple_tic(tic);
-
 // Loop for each row vector in B
 #pragma omp parallel for num_threads(num_threads)
     for (size_t partition = 0; partition < num_threads; partition++) {
@@ -98,7 +83,7 @@ extern "C" void mxm_like_partition_no_conv(
 
             std::sort(M_st, M_st + M_size);
             std::sort(B_st, B_st + B_size);
-            
+
             mxv_like_v1(tmp_C, M_st, M_size, IA_arr, IA_size, JA_arr, JA_size,
                         B_st, B_size);
 
@@ -114,13 +99,5 @@ extern "C" void mxm_like_partition_no_conv(
         (*IC_size)[partition] = partitioned_IC[partition]->size();
         (*JC)[partition] = partitioned_JC[partition]->data();
         (*JC_size)[partition] = partitioned_JC[partition]->size();
-
-        // printf("IC[%lu].size=%lu JC[%lu].size=%lu\n", partition,
-        //        (*IC_size)[partition], partition, (*JC_size)[partition]);
     }
-
-    result = simple_toc(tic);
-    printf("Enum %f\n", result * 1e3);
-
-    simple_tic(tic);
 }

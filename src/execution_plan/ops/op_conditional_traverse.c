@@ -64,12 +64,6 @@ static void _populate_filter_matrix(OpCondTraverse *op) {
         GrB_Matrix_setElement_BOOL(FM, true, i, srcId);
     }
 }
-
-// DO NOT CHANGE
-/*start_mode_configuration*/
-#define CN_MXM_LIKE
-/*end_mode_configuration*/
-
 void _traverse(OpCondTraverse *op) {
     // printf("Traverse\n");
 
@@ -139,7 +133,7 @@ void _traverse(OpCondTraverse *op) {
             IB_arr[i] = i * plan_nnz;
             size_t j_idx = 0;
             for (size_t j = 0; j < num_vertices; j++) {
-                if (QPLAN[QPLAN_ID][op->destNodeIdx][op->prev_R->V[i * num_vertices + j] - 1]) {
+                if (QPLAN[QPLAN_ID][op->destNodeIdx][j]) {
                     JB_arr[i * plan_nnz + j_idx] =
                         op->prev_R->J[i * num_vertices + j];
                     j_idx++;
@@ -335,26 +329,12 @@ static Record CondTraverseConsume(OpBase *opBase) {
             if (op->prev_R->J == NULL) {
                 return NULL;
             }
-            op->prev_R->V =
-                (size_t *)malloc(sizeof(size_t) * op->prev_R->J_size);
-            if (op->prev_R->V == NULL) {
-                return NULL;
-            }
             op->prev_R->I[0] = 0;
-
-#pragma omp parallel for num_threads(num_threads)
-            for (size_t i = 0; i < op->prev_R->J_size; i++) {
-                op->prev_R->V[i] = 1;
-            }
-
-            // printf("R_I\n");
 
 #pragma omp parallel for num_threads(num_threads)
             for (size_t i = 1; i < op->prev_R->I_size; i++) {
                 op->prev_R->I[i] = i * current_record_size;
             }
-
-            // printf("R_J\n");
 
 #pragma omp parallel for num_threads(num_threads)
             for (size_t i = 0; i < op->record_count; i++) {
@@ -418,6 +398,8 @@ static Record CondTraverseConsume(OpBase *opBase) {
                     else {
                         // Advance i
                         op->iter_i++;
+                        if (op->r != NULL) OpBase_DeleteRecord(op->r);
+                        op->r = NULL;
                         // No need to set j = 0 (CSR)
                         // op->iter_j = 0;
                     }
@@ -427,11 +409,12 @@ static Record CondTraverseConsume(OpBase *opBase) {
                     // Free unused IC and JC
                     free(op->IC_list[op->M_list_cur]);
                     free(op->JC_list[op->M_list_cur]);
-
                     // Advance m
                     op->M_list_cur++;
                     // Set i = j = 0
                     op->iter_i = op->iter_j = 0;
+                    if (op->r != NULL) OpBase_DeleteRecord(op->r);
+                    op->r = NULL;
                 }
             }
             // If M_list is out of bound
@@ -443,7 +426,6 @@ static Record CondTraverseConsume(OpBase *opBase) {
 
                 free(op->prev_R->I);
                 free(op->prev_R->J);
-                free(op->prev_R->V);
                 free(op->prev_R);
 
                 return NULL;
@@ -453,34 +435,23 @@ static Record CondTraverseConsume(OpBase *opBase) {
         assert(src_id != INVALID_ENTITY_ID);
         assert(dest_id != INVALID_ENTITY_ID);
 
-        size_t num_vertices = op->prev_R->J_size / (op->prev_R->I_size - 1);
+        if (op->r == NULL) {
+            size_t num_vertices = op->prev_R->J_size / (op->prev_R->I_size - 1);
 
-        op->r = OpBase_CreateRecord((OpBase *)op);
-
-        for (size_t i = 0; i < num_vertices; i++) {
-            Node node = GE_NEW_NODE();
-            Graph_GetNode(op->graph, op->prev_R->J[(src_id * num_vertices) + i],
-                          &node);
-            Record_AddNode(
-                op->r, op->prev_R->V[(src_id * num_vertices) + i] - 1, node);
+            op->r = OpBase_CreateRecord((OpBase *)op);
+            for (size_t i = 0; i < num_vertices; i++) {
+                Node node = GE_NEW_NODE();
+                Graph_GetNode(op->graph,
+                              op->prev_R->J[(src_id * num_vertices) + i],
+                              &node);
+                Record_AddNode(op->r, i, node);
+            }
         }
 
         // Populate the destination node and add it to the Record.
         Node node = GE_NEW_NODE();
         Graph_GetNode(op->graph, dest_id, &node);
         Record_AddNode(op->r, op->destNodeIdx, node);
-
-        // // FIXME: Set EdgeTraverseCtx for all pair of edges
-        // if (op->edge_ctx) {
-        //     Node *srcNode = Record_GetNode(op->r, op->srcNodeIdx);
-        //     // Collect all appropriate edges connecting the current pair of
-        //     // endpoints.
-        //     EdgeTraverseCtx_CollectEdges(op->edge_ctx,
-        //     ENTITY_GET_ID(srcNode),
-        //                                  ENTITY_GET_ID(&destNode));
-        //     // We're guaranteed to have at least one edge.
-        //     EdgeTraverseCtx_SetEdge(op->edge_ctx, op->r);
-        // }
 
         return OpBase_CloneRecord(op->r);
     }
@@ -543,12 +514,6 @@ static Record CondTraverseConsume(OpBase *opBase) {
             return NULL;
         }
 
-        output_matrix->V =
-            (size_t *)malloc(sizeof(size_t) * output_matrix->J_size);
-        if (output_matrix->V == NULL) {
-            return NULL;
-        }
-
         // Do multiple times
 #pragma omp parallel for num_threads(num_threads)
         for (size_t m = 0; m < op->M_list_cap; m++) {
@@ -562,19 +527,14 @@ static Record CondTraverseConsume(OpBase *opBase) {
             size_t IR_size = in_offset[m + 1] - in_offset[m];
             size_t *JR = op->prev_R->J + (in_offset[m] * num_vertices);
             size_t JR_size = IR_size * num_vertices;
-            size_t *VR = op->prev_R->V + (in_offset[m] * num_vertices);
             assert((IC_size - 1) == IR_size);
 
             size_t *JP =
                 output_matrix->J + (out_offset[m] * (num_vertices + 1));
-            size_t *VP =
-                output_matrix->V + (out_offset[m] * (num_vertices + 1));
             // Loop each row in R
             for (size_t i = 0; i < IR_size; i++) {
                 size_t *JR_st = JR + (i * num_vertices);
                 size_t *JR_en = JR + ((i + 1) * num_vertices);
-                size_t *VR_st = VR + (i * num_vertices);
-                size_t *VR_en = VR + ((i + 1) * num_vertices);
 
                 // Union the current row in R with all C
                 // Loop each element in row C
@@ -584,30 +544,12 @@ static Record CondTraverseConsume(OpBase *opBase) {
                     // Loop each element in JR
                     // Assume JC_st to JC_en is in the sorted order
                     bool is_inserted = false;
-                    for (size_t *JR_pt = JR_st, *VR_pt = VR_st; JR_pt != JR_en;
-                         JR_pt++, VR_pt++) {
-                        if (!is_inserted && *JC_pt > *JR_pt) {
-                            *JP = *JC_pt;
-                            *VP = num_vertices + 1;
-                            // printf("%lu (%lu)  ", *JP, *VP);
-                            JP++;
-                            VP++;
-                            is_inserted = true;
-                        }
+                    for (size_t *JR_pt = JR_st; JR_pt != JR_en; JR_pt++) {
                         *JP = *JR_pt;
-                        *VP = *VR_pt;
-                        // printf("%lu (%lu)  ", *JP, *VP);
                         JP++;
-                        VP++;
                     }
-                    if (!is_inserted) {
-                        *JP = *JC_pt;
-                        *VP = num_vertices + 1;
-                        // printf("%lu (%lu)  ", *JP, *VP);
-                        JP++;
-                        VP++;
-                    }
-                    // printf("\n");
+                    *JP = *JC_pt;
+                    JP++;
                 }
             }
         }
@@ -619,7 +561,6 @@ static Record CondTraverseConsume(OpBase *opBase) {
 
         free(op->prev_R->I);
         free(op->prev_R->J);
-        free(op->prev_R->V);
         free(op->prev_R);
 
         return (Record)output_matrix;
