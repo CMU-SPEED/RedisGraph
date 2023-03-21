@@ -128,7 +128,7 @@ void _traverse(OpCondTraverse *op) {
         for (size_t i = 0; i < num_vertices; i++) {
             // For clique
             plan[i] = QPLAN[QPLAN_ID][op->destNodeIdx][i];
-            plan_size++;
+            if (plan[i]) plan_size++;
         }
     }
     result = simple_toc(tic);

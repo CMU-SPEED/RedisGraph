@@ -19,7 +19,7 @@ extern "C" void mxv_like_v1(std::vector<size_t> &Ic, size_t *Im, size_t Im_size,
 extern "C" void mxm_like_partition_no_conv(
     size_t ***IC, size_t **IC_size, size_t ***JC, size_t **JC_size, size_t *IM,
     size_t IM_size, size_t *JM, size_t JM_size, size_t *IB, size_t IB_size,
-    size_t *JB, size_t JB_size, GrB_Matrix *A, uint64_t current_record_size) {
+    size_t *JB, size_t JB_size, GrB_Matrix *A) {
     size_t num_threads = omp_get_max_threads();
 
     double result = 0.0;
@@ -87,8 +87,7 @@ extern "C" void mxm_like_partition_no_conv(
              ib < partition_offset[partition + 1]; ib++) {
             std::vector<size_t> tmp_C;
 
-            size_t *M_st, M_size = 0;
-            // TODO: Is it because of IM.size() -> IM_size
+            size_t *M_st = NULL, M_size = 0;
             if (IM_size != 0) {
                 M_st = JM_arr + IM_arr[ib];
                 M_size = IM_arr[ib + 1] - IM_arr[ib];
@@ -97,26 +96,11 @@ extern "C" void mxm_like_partition_no_conv(
             size_t *B_st = JB_arr + IB_arr[ib];
             size_t B_size = IB_arr[ib + 1] - IB_arr[ib];
 
-            // printf("M [ ");
-            // for (size_t i = 0; i < M_size; i++) {
-            //     printf("%lu ", *(M_st + i));
-            // }
-            // printf("]  *  ");
-
-            // printf("B [ ");
-            // for (size_t i = 0; i < B_size; i++) {
-            //     printf("%lu ", *(B_st + i));
-            // }
-            // printf("]\n");
-
+            std::sort(M_st, M_st + M_size);
+            std::sort(B_st, B_st + B_size);
+            
             mxv_like_v1(tmp_C, M_st, M_size, IA_arr, IA_size, JA_arr, JA_size,
                         B_st, B_size);
-
-            // printf("C [ ");
-            // for (size_t i = 0; i < tmp_C.size(); i++) {
-            //     printf("%lu ", tmp_C[i]);
-            // }
-            // printf("]\n");
 
             // FIXME: We should not copy (unnecessary operations)
             partitioned_JC[partition]->insert(partitioned_JC[partition]->end(),

@@ -31,8 +31,6 @@ extern "C" void mxm_like_partition_ptr(size_t ***IC, size_t **IC_size,
     GrB_Matrix_nrows(&nrows_A, *A);
     GrB_Matrix_nvals(&JA_size, *A);
     IA_size = nrows_A + 1;
-    // printf("IA_size=%lu JA_size=%lu\n", IA_size, JA_size);
-
     IA_arr = new size_t[IA_size];
     JA_arr = new size_t[JA_size];
     bool *VA_arr = new bool[JA_size];
