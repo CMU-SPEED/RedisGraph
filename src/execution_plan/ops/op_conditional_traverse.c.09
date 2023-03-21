@@ -16,7 +16,6 @@
 #include "shared/print_functions.h"
 
 // default number of records to accumulate before traversing
-// #define BATCH_SIZE 16
 #define BATCH_SIZE 100000000
 
 /* Forward declarations. */

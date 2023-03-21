@@ -70,4 +70,4 @@ deps/GraphBLAS/Config/GraphBLAS.h.tmp
 /.vscode/
 /1/
 
-dump.rdb
+*.rdb

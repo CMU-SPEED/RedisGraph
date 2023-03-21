@@ -47,6 +47,11 @@ static void _populate_filter_matrix(OpCondTraverse *op) {
     }
 }
 
+// DO NOT CHANGE
+/*start_mode_configuration*/
+#define CN_MXM_LIKE
+/*end_mode_configuration*/
+
 void _traverse(OpCondTraverse *op) {
     // printf("Traverse\n");
 
@@ -98,6 +103,11 @@ void _traverse(OpCondTraverse *op) {
     result = simple_toc(tic);
     printf("Prep %f\n", result * 1e3);
 
+    // // Input
+    // mxm_like_partition_ptr(&IC_list, &IC_size_list, &JC_list, &JC_size_list,
+    //                        &op->records, op->record_count,
+    //                        &(op->graph->adjacency_matrix->matrix), &plan,
+    //                        plan_size, current_record_size);
     mxm_like_partition_no_conv(
         &IC_list, &IC_size_list, &JC_list, &JC_size_list, op->prev_R->I,
         op->prev_R->I_size, op->prev_R->J, op->prev_R->J_size, op->prev_R->I,
@@ -343,8 +353,6 @@ static Record CondTraverseConsume(OpBase *opBase) {
                     else {
                         // Advance i
                         op->iter_i++;
-                        if (op->r != NULL) OpBase_DeleteRecord(op->r);
-                        op->r = NULL;
                         // No need to set j = 0 (CSR)
                         // op->iter_j = 0;
                     }
@@ -354,12 +362,11 @@ static Record CondTraverseConsume(OpBase *opBase) {
                     // Free unused IC and JC
                     free(op->IC_list[op->M_list_cur]);
                     free(op->JC_list[op->M_list_cur]);
+
                     // Advance m
                     op->M_list_cur++;
                     // Set i = j = 0
                     op->iter_i = op->iter_j = 0;
-                    if (op->r != NULL) OpBase_DeleteRecord(op->r);
-                    op->r = NULL;
                 }
             }
             // If M_list is out of bound
@@ -380,17 +387,16 @@ static Record CondTraverseConsume(OpBase *opBase) {
         assert(src_id != INVALID_ENTITY_ID);
         assert(dest_id != INVALID_ENTITY_ID);
 
-        if (op->r == NULL) {
-            size_t num_vertices = op->prev_R->J_size / (op->prev_R->I_size - 1);
+        size_t num_vertices = op->prev_R->J_size / (op->prev_R->I_size - 1);
 
-            op->r = OpBase_CreateRecord((OpBase *)op);
-            for (size_t i = 0; i < num_vertices; i++) {
-                Node node = GE_NEW_NODE();
-                Graph_GetNode(op->graph,
-                              op->prev_R->J[(src_id * num_vertices) + i],
-                              &node);
-                Record_AddNode(op->r, i, node);
-            }
+        op->r = OpBase_CreateRecord((OpBase *)op);
+        
+        for (size_t i = 0; i < num_vertices; i++) {
+            Node node = GE_NEW_NODE();
+            Graph_GetNode(op->graph, op->prev_R->J[(src_id * num_vertices) + i],
+                          &node);
+            Record_AddNode(
+                op->r, i, node);
         }
 
         // Populate the destination node and add it to the Record.
@@ -489,7 +495,8 @@ static Record CondTraverseConsume(OpBase *opBase) {
                     // Loop each element in JR
                     // Assume JC_st to JC_en is in the sorted order
                     bool is_inserted = false;
-                    for (size_t *JR_pt = JR_st; JR_pt != JR_en; JR_pt++) {
+                    for (size_t *JR_pt = JR_st; JR_pt != JR_en;
+                         JR_pt++) {
                         *JP = *JR_pt;
                         JP++;
                     }
