@@ -85,7 +85,6 @@ void _traverse(OpCondTraverse *op) {
         AlgebraicExpression_Optimize(&op->ae);
     }
 
-    // #define ORIGINAL
     double result = 0.0;
     double tic[2];
 

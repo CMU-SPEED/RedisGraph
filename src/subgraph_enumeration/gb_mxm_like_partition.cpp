@@ -22,12 +22,6 @@ extern "C" void mxm_like_partition(
 
 extern "C" void gb_mxm_like_partition(GrB_Matrix *&C, GrB_Matrix &M,
                                             GrB_Matrix &A, GrB_Matrix &B) {
-    // printf("gb_mxm_like_partition\n");
-    double result = 0.0;
-    double tic[2] = {0, 0};
-
-    simple_tic(tic);
-
     GrB_Info info;
 
     // ⭐️ Extract essential information
@@ -47,19 +41,12 @@ extern "C" void gb_mxm_like_partition(GrB_Matrix *&C, GrB_Matrix &M,
         GrB_Matrix_nrows(&nrows_M, M);
         GrB_Matrix_ncols(&ncols_M, M);
     }
-
-    // ⭐️ Assert dimensions
-    // M
     assert(nrows_A == nrows_M);
-    // K
     assert(ncols_A == nrows_B);
-    // N
     assert(ncols_B == ncols_M);
 
     // ⭐️ Compute C dimensions
-    GrB_Index nrows_C, ncols_C;
-    nrows_C = nrows_M;
-    ncols_C = ncols_M;
+    GrB_Index nrows_C = nrows_M;
 
     // ⭐️ Extract A, B, M as CSR vectors
     // IA = nrows + 1, JA = nvals, VA = nvals
@@ -118,31 +105,13 @@ extern "C" void gb_mxm_like_partition(GrB_Matrix *&C, GrB_Matrix &M,
 
     std::vector<std::vector<size_t> *> IC, JC;
 
-    result = simple_toc(tic);
-    printf("ConvB %f\n", result * 1e3);
-
-    // simple_tic(tic);
-
-    // Do mxm
-
-    // size_t M_size = JM.size() / (IM.size() - 1);
-    // size_t A_size = JA.size() / (IA.size() - 1);
-    // printf("M_size=%d, A_size=%d\n", M_size, A_size);
-    // mxm_like_partition_indexless(IC, JC, JM.size(), JM, IB, JB,
-    // JA.size(), JA);
-
     mxm_like_partition(IC, JC, IM, JM, IB, JB, IA, JA);
-
-    // result = simple_toc(tic);
-    // printf("mxm_like_partition: %f ms\n", result * 1e3);
-
-    simple_tic(tic);
 
     size_t num_threads = omp_get_max_threads();
 
     // If there is no data
+#pragma omp parallel for num_threads(num_threads)
     for (size_t i = 0; i < num_threads; i++) {
-        // printf("IC=%d, JC=%d (IC->back()=%d)\n", IC[i]->size(), JC[i]->size(), IC[i]->back());
         if (IC[i]->back() == 0) {
             // New matrix
             info = GrB_Matrix_new(&(C[i]), GrB_BOOL, IC[i]->size() - 1, ncols_M);
@@ -150,7 +119,6 @@ extern "C" void gb_mxm_like_partition(GrB_Matrix *&C, GrB_Matrix &M,
             std::vector<bool> VC(JC[i]->size(), 1);
             bool *VC_data = new bool[VC.size()];
             std::copy(std::begin(VC), std::end(VC), VC_data);
-
             // Import C as CSR
             info = GrB_Matrix_import_BOOL(&(C[i]), GrB_BOOL, IC[i]->size() - 1, ncols_M, IC[i]->data(),
                                         JC[i]->data(), VC_data, IC[i]->size(), JC[i]->size(),
@@ -158,30 +126,12 @@ extern "C" void gb_mxm_like_partition(GrB_Matrix *&C, GrB_Matrix &M,
             delete[] VC_data;
             delete IC[i];
             delete JC[i];
-
-            // GxB_Matrix_fprint(C[i], "C_after", GxB_SUMMARY, stdout);
         }
-        // printf("info_imp=%d\n", info);
         assert(info == GrB_SUCCESS);
     }
-
-    result = simple_toc(tic);
-    printf("ConvA %f\n", result * 1e3);
 }
 
 extern "C" void _gb_mxm_like_partition(GrB_Matrix **C, GrB_Matrix *M,
                                              GrB_Matrix *A, GrB_Matrix *B) {
-    // double result = 0.0;
-    // double tic[2];
-    // simple_tic(tic);
-
     gb_mxm_like_partition(*C, *M, *A, *B);
-
-    // result = simple_toc(tic);
-    // printf("gb_mxm_like_partition: %f ms\n", result * 1e3);
-
-    // GxB_Matrix_fprint(*A, "A", GxB_SUMMARY, stdout);
-    // GxB_Matrix_fprint(*B, "B", GxB_SUMMARY, stdout);
-    // GxB_Matrix_fprint(*M, "M", GxB_SUMMARY, stdout);
-    // GxB_Matrix_fprint(*C, "C", GxB_SUMMARY, stdout);
 }

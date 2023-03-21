@@ -22,8 +22,6 @@ const int QPLAN[6][4][4] = {
  * or the Server Side Public License v1 (SSPLv1).
  */
 
-#include "op_conditional_traverse.h"
-
 #include <omp.h>
 #include <time.h>
 
@@ -31,6 +29,7 @@ const int QPLAN[6][4][4] = {
 #include "../../subgraph_enumeration/subgraph_enumeration.hpp"
 #include "../../util/simple_timer.h"
 #include "RG.h"
+#include "op_conditional_traverse.h"
 #include "shared/print_functions.h"
 
 // default number of records to accumulate before traversing
@@ -86,7 +85,6 @@ void _traverse(OpCondTraverse *op) {
         AlgebraicExpression_Optimize(&op->ae);
     }
 
-    // #define ORIGINAL
     double result = 0.0;
     double tic[2];
 
@@ -137,16 +135,49 @@ void _traverse(OpCondTraverse *op) {
     result = simple_toc(tic);
     printf("%f ms\n", result * 1e3);
 
+    uint64_t num_threads = op->M_list_cap;
+    GrB_Matrix *output_list = NULL;
     printf("Enumeration: ");
     simple_tic(tic);
-    { _gb_mxm_like_partition_merge(&(op->M->matrix), &M, &S, &A); }
+    {
+        output_list = (GrB_Matrix *)malloc(sizeof(GrB_Matrix) * num_threads);
+        if (output_list == NULL) {
+            return;
+        }
+
+        _gb_mxm_like_partition(&output_list, &M, &S, &A);
+    }
     result = simple_toc(tic);
     printf("%f ms\n", result * 1e3);
 
     GrB_Matrix_free(&M);
     GrB_Matrix_free(&S);
 
-    RG_MatrixTupleIter_attach(&op->iter, op->M);
+    op->M_list = (RG_Matrix *)malloc(sizeof(RG_Matrix) * num_threads);
+    if (op->M_list == NULL) {
+        return;
+    }
+
+    op->IM = (uint *)malloc(sizeof(uint) * (num_threads + 1));
+    if (op->M_list == NULL) {
+        return;
+    }
+    op->IM[0] = 0;
+
+    // M_list -> output_list
+    for (size_t i = 0; i < num_threads; i++) {
+        GrB_Index nrows, ncols;
+        GrB_Matrix_nrows(&nrows, output_list[i]);
+        GrB_Matrix_ncols(&ncols, output_list[i]);
+        RG_Matrix_new(&(op->M_list[i]), GrB_BOOL, nrows, ncols);
+        op->M_list[i]->matrix = output_list[i];
+        op->IM[i + 1] = nrows + op->IM[i];
+    }
+
+    // Free output list
+    if (output_list != NULL) {
+        free(output_list);
+    }
 }
 
 OpBase *NewCondTraverseOp(const ExecutionPlan *plan, Graph *g,
@@ -225,6 +256,20 @@ static Record CondTraverseConsume(OpBase *opBase) {
 
         // Managed to get a tuple, break.
         if (info == GrB_SUCCESS) {
+            src_id += op->IM[op->M_list_cur - 1];
+            break;
+        } else if (op->M_list != NULL) {
+            if (op->M_list_cur < op->M_list_cap) {
+                RG_MatrixTupleIter_attach(&op->iter,
+                                          op->M_list[op->M_list_cur]);
+                op->M_list_cur++;
+                info = RG_MatrixTupleIter_next_UINT64(&op->iter, &src_id,
+                                                      &dest_id, NULL);
+            }
+        }
+        // Managed to get a tuple with the new iterator, break.
+        if (info == GrB_SUCCESS) {
+            src_id += op->IM[op->M_list_cur - 1];
             break;
         }
 

@@ -18,13 +18,8 @@ extern "C" void mxm_like_partition(
     std::vector<size_t> &IM, std::vector<size_t> &JM, std::vector<size_t> &IA,
     std::vector<size_t> &JA, std::vector<size_t> &IB, std::vector<size_t> &JB) {
     size_t num_threads = omp_get_max_threads();
-    // printf("mxm_like_partition::num_threads = %d\n", num_threads);
 
-    double result = 0.0;
-    double tic[2];
-    simple_tic(tic);
-
-    size_t *IM_arr, *JM_arr;
+    size_t *IM_arr = NULL, *JM_arr = NULL;
     if (IM.size() != 0) {
         IM_arr = IM.data();
         JM_arr = JM.data();
@@ -57,11 +52,6 @@ extern "C" void mxm_like_partition(
         partitioned_JC[t] = new std::vector<size_t>();
     }
 
-    result = simple_toc(tic);
-    printf("Part %f\n", result * 1e3);
-
-    simple_tic(tic);
-
     size_t IM_size = IM.size();
 
 // Loop for each row vector in B
@@ -71,7 +61,7 @@ extern "C" void mxm_like_partition(
              ib < partition_offset[partition + 1]; ib++) {
             std::vector<size_t> tmp_C;
 
-            size_t *M_st, M_size = 0;
+            size_t *M_st = NULL, M_size = 0;
             if (IM_size != 0) {
                 M_st = JM_arr + IM_arr[ib];
                 M_size = IM_arr[ib + 1] - IM_arr[ib];
@@ -90,11 +80,6 @@ extern "C" void mxm_like_partition(
                 partitioned_JC[partition]->size());
         }
     }
-
-    result = simple_toc(tic);
-    printf("Enum %f\n", result * 1e3);
-
-    simple_tic(tic);
 
     IC = partitioned_IC;
     JC = partitioned_JC;
