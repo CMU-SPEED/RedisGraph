@@ -129,7 +129,7 @@ do
                                 >> ${CLIENT_LOG};
                         fi
                     else
-                        if [ "$query" = "0" ] || [ "$mode" = "1" ]; then
+                        if [ "$query" = "0" ] || [ "$query" = "1" ]; then
                             ~/dbms/redis/src/redis-cli \
                                 --raw graph.profile "$graph_name" \
                                 "MATCH (a)-->(b), (b)-->(c) RETURN [a,b,c]" \

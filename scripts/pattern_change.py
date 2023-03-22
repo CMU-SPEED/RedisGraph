@@ -5,8 +5,8 @@ if len(sys.argv) != 3:
     print("Command: python3 mode_change.py [TRAVERSE_MODE_ID] [QUERY_PLAN_ID]")
     exit(0)
 
-original = open(f"src/execution_plan/ops/op_conditional_traverse.c.{int(sys.argv[1]):02d}", "r")
-modified = open("src/execution_plan/ops/op_conditional_traverse_modified.c", "w")
+original = open(f"/home/ykerdcha/RedisGraph/src/execution_plan/ops/op_conditional_traverse.c.{int(sys.argv[1]):02d}", "r")
+modified = open("/home/ykerdcha/RedisGraph/src/execution_plan/ops/op_conditional_traverse_modified.c", "w")
 
 # Copy
 in_pattern = False
@@ -25,5 +25,5 @@ for line in original:
         modified.write(line)
 
 # Remove old files
-os.unlink("src/execution_plan/ops/op_conditional_traverse.c")
-os.rename("src/execution_plan/ops/op_conditional_traverse_modified.c", "src/execution_plan/ops/op_conditional_traverse.c")
+os.unlink("/home/ykerdcha/RedisGraph/src/execution_plan/ops/op_conditional_traverse.c")
+os.rename("/home/ykerdcha/RedisGraph/src/execution_plan/ops/op_conditional_traverse_modified.c", "/home/ykerdcha/RedisGraph/src/execution_plan/ops/op_conditional_traverse.c")

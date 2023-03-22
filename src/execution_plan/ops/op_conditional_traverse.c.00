@@ -1,5 +1,5 @@
 /*start_query_plan*/
-#define QUERY_PLAN 0
+#define QPLAN_ID 0
 /*end_query_plan*/
 
 /*

@@ -81,10 +81,11 @@ extern "C" void mxm_like_partition_no_conv(
             size_t *B_st = JB_arr + IB_arr[ib];
             size_t B_size = IB_arr[ib + 1] - IB_arr[ib];
 
-            std::sort(M_st, M_st + M_size);
-            std::sort(B_st, B_st + B_size);
+            // Copy and Sorted
+            std::vector<size_t> M_sorted(M_st, M_st + M_size);
+            std::sort(std::begin(M_sorted), std::end(M_sorted));
 
-            mxv_like_v1(tmp_C, M_st, M_size, IA_arr, IA_size, JA_arr, JA_size,
+            mxv_like_v1(tmp_C, M_sorted.data(), M_sorted.size(), IA_arr, IA_size, JA_arr, JA_size,
                         B_st, B_size);
 
             // FIXME: We should not copy (unnecessary operations)
