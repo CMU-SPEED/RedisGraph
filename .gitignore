@@ -71,3 +71,4 @@ deps/GraphBLAS/Config/GraphBLAS.h.tmp
 /1/
 
 *.rdb
+*.log
