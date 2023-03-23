@@ -53,9 +53,12 @@ typedef struct {
     size_t iter_i;
     size_t iter_j;
     CSRRecord *prev_R;
+    RG_Matrix *prev_gbR;
+    NodeID prev_ID;
     EdgeTraverseCtx
         *edge_ctx;  // Edge collection data if the edge needs to be set.
     RG_MatrixTupleIter iter;  // Iterator over M.
+    RG_MatrixTupleIter iter_R;  // Iterator over M.
     int srcNodeIdx;           // Source node index into record.
     int destNodeIdx;          // Destination node index into record.
     uint record_count;        // Number of held records.

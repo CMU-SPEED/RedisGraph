@@ -1,5 +1,5 @@
 /*start_query_plan*/
-#define QPLAN_ID 1
+#define QPLAN_ID 0
 /*end_query_plan*/
 
 const int QPLAN[6][4][4] = {

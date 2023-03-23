@@ -106,7 +106,16 @@ extern "C" void gb_mxm_like_partition_merge(GrB_Matrix &C, GrB_Matrix &M,
 
     std::vector<size_t> IC, JC;
 
+    double result = 0.0;
+    double tic[2];
+
+    printf("(My CN) MxM: ");
+    simple_tic(tic);
+    {
     mxm_like_partition_merge(IC, JC, IM, JM, IB, JB, IA, JA);
+    }
+    result = simple_toc(tic);
+    printf("%f ms\n", result * 1e3);
 
     // If there is no data
     if (IC[nrows_C] == 0) {

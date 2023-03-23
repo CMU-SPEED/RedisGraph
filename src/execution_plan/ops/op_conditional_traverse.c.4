@@ -135,11 +135,13 @@ void _traverse(OpCondTraverse *op) {
     result = simple_toc(tic);
     printf("%f ms\n", result * 1e3);
 
-    printf("Enumeration: ");
-    simple_tic(tic);
-    { _gb_mxm_like_partition_merge(&(op->M->matrix), &M, &S, &A); }
-    result = simple_toc(tic);
-    printf("%f ms\n", result * 1e3);
+    // printf("Enumeration: ");
+    // simple_tic(tic);
+    { 
+        _gb_mxm_like_partition_merge(&(op->M->matrix), &M, &S, &A); 
+    }
+    // result = simple_toc(tic);
+    // printf("%f ms\n", result * 1e3);
 
     GrB_Matrix_free(&M);
     GrB_Matrix_free(&S);

@@ -5,7 +5,7 @@ if len(sys.argv) != 3:
     print("Command: python3 mode_change.py [TRAVERSE_MODE_ID] [QUERY_PLAN_ID]")
     exit(0)
 
-original = open(f"/home/ykerdcha/RedisGraph/src/execution_plan/ops/op_conditional_traverse.c.{int(sys.argv[1]):02d}", "r")
+original = open(f"/home/ykerdcha/RedisGraph/src/execution_plan/ops/op_conditional_traverse.c.{sys.argv[1]}", "r")
 modified = open("/home/ykerdcha/RedisGraph/src/execution_plan/ops/op_conditional_traverse_modified.c", "w")
 
 # Copy

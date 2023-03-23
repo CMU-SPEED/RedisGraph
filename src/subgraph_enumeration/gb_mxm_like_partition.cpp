@@ -1,5 +1,5 @@
-#include <stdio.h>
 #include <omp.h>
+#include <stdio.h>
 
 #include <algorithm>
 #include <cassert>
@@ -16,12 +16,13 @@ extern "C" {
 }
 
 extern "C" void mxm_like_partition(
-    std::vector<std::vector<size_t> *> &IC, std::vector<std::vector<size_t> *> &JC,
-    std::vector<size_t> &IM, std::vector<size_t> &JM, std::vector<size_t> &IA,
-    std::vector<size_t> &JA, std::vector<size_t> &IB, std::vector<size_t> &JB);
+    std::vector<std::vector<size_t> *> &IC,
+    std::vector<std::vector<size_t> *> &JC, std::vector<size_t> &IM,
+    std::vector<size_t> &JM, std::vector<size_t> &IA, std::vector<size_t> &JA,
+    std::vector<size_t> &IB, std::vector<size_t> &JB);
 
 extern "C" void gb_mxm_like_partition(GrB_Matrix *&C, GrB_Matrix &M,
-                                            GrB_Matrix &A, GrB_Matrix &B) {
+                                      GrB_Matrix &A, GrB_Matrix &B) {
     GrB_Info info;
 
     // ⭐️ Extract essential information
@@ -105,7 +106,14 @@ extern "C" void gb_mxm_like_partition(GrB_Matrix *&C, GrB_Matrix &M,
 
     std::vector<std::vector<size_t> *> IC, JC;
 
-    mxm_like_partition(IC, JC, IM, JM, IB, JB, IA, JA);
+    double result = 0.0;
+    double tic[2];
+
+    printf("(My CN - No Merge) MxM: ");
+    simple_tic(tic);
+    { mxm_like_partition(IC, JC, IM, JM, IB, JB, IA, JA); }
+    result = simple_toc(tic);
+    printf("%f ms\n", result * 1e3);
 
     size_t num_threads = omp_get_max_threads();
 
@@ -114,15 +122,17 @@ extern "C" void gb_mxm_like_partition(GrB_Matrix *&C, GrB_Matrix &M,
     for (size_t i = 0; i < num_threads; i++) {
         if (IC[i]->back() == 0) {
             // New matrix
-            info = GrB_Matrix_new(&(C[i]), GrB_BOOL, IC[i]->size() - 1, ncols_M);
+            info =
+                GrB_Matrix_new(&(C[i]), GrB_BOOL, IC[i]->size() - 1, ncols_M);
         } else {
             std::vector<bool> VC(JC[i]->size(), 1);
             bool *VC_data = new bool[VC.size()];
             std::copy(std::begin(VC), std::end(VC), VC_data);
             // Import C as CSR
-            info = GrB_Matrix_import_BOOL(&(C[i]), GrB_BOOL, IC[i]->size() - 1, ncols_M, IC[i]->data(),
-                                        JC[i]->data(), VC_data, IC[i]->size(), JC[i]->size(),
-                                        VC.size(), GrB_CSR_FORMAT);
+            info = GrB_Matrix_import_BOOL(&(C[i]), GrB_BOOL, IC[i]->size() - 1,
+                                          ncols_M, IC[i]->data(), JC[i]->data(),
+                                          VC_data, IC[i]->size(), JC[i]->size(),
+                                          VC.size(), GrB_CSR_FORMAT);
             delete[] VC_data;
             delete IC[i];
             delete JC[i];
@@ -132,6 +142,6 @@ extern "C" void gb_mxm_like_partition(GrB_Matrix *&C, GrB_Matrix &M,
 }
 
 extern "C" void _gb_mxm_like_partition(GrB_Matrix **C, GrB_Matrix *M,
-                                             GrB_Matrix *A, GrB_Matrix *B) {
+                                       GrB_Matrix *A, GrB_Matrix *B) {
     gb_mxm_like_partition(*C, *M, *A, *B);
 }
