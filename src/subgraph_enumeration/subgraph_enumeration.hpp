@@ -26,3 +26,9 @@ void mxm_like_partition_no_conv(size_t ***IC, size_t **IC_size, size_t ***JC,
                                 GrB_Matrix *A);
 
 void cpp_sort(size_t *a_st, size_t *a_en);
+
+void enumerate_subgraph_v1(uint64_t ***IC_out, uint64_t **IC_out_size,
+                           uint64_t ***JC_out, uint64_t **JC_out_size,
+                           uint64_t **IM_out, uint64_t *IM_out_size,
+                           uint64_t **JM_out, uint64_t *JM_out_size,
+                           uint64_t **plan, GrB_Matrix A);

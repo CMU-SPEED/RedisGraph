@@ -9,7 +9,7 @@ BASEDIR=/sharedstorage/ykerdcha/code/query_benchmark/script/;
 LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$(realpath $BASEDIR/../deps/GraphBLAS/build/);
 
 EXCEPTION="(^.*orkut_adj.*$)"
-CONTAIN="(^.*(ca-GrQc|cit-Patents)_adj_IA.*$)"
+CONTAIN="(^.*(cit-Patents)_adj_IA.*$)"
 # CONTAIN="(^.*(ca-GrQc|facebook|cit-Patents)_adj_IA.*$)"
 # CONTAIN="(^.*(roadNet-PA|cit-Patents|ca-GrQc|facebook|oregon1_010526|oregon2_010526|p2p-Gnutella30|email-Enron|as20000102|as-caida20071105|cit-HepTh|email-EuAll|amazon0302|soc-Epinions1|loc-brightkite_edges)_adj_IA.*$)"
 DATE=$(date -d "today" +"%Y%m%d%H%M")
@@ -60,12 +60,12 @@ do
         for query in 1
         # for query in 0 1 2 3 4 5
         do
-            for mode in 3 4 5
+            for mode in 10
             do
                 # Make mode
                 python3 scripts/pattern_change.py "$mode" "$query";
                 make;
-                for num_threads in 1 24;
+                for num_threads in 24;
                 # for num_threads in 1 24;
                 do
                     # run redis-server
