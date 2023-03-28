@@ -118,7 +118,7 @@ void _traverse(OpCondTraverse *op) {
     printf("%f ms\n", result * 1e3);
 
     // printf("Enumeration: ");
-    // simple_tic(tic);
+    simple_tic(tic);
     {
         uint64_t nV = 0;
         for (uint64_t j = 0; j < 4; j++) {
@@ -130,8 +130,8 @@ void _traverse(OpCondTraverse *op) {
         _gb_matrix_filter_v2(&(op->M->matrix), &((*(op->prev_gbR))->matrix), &S,
                           &(op->graph->adjacency_matrix->matrix), nV);
     }
-    // result = simple_toc(tic);
-    // printf("%f ms\n", result * 1e3);
+    result = simple_toc(tic);
+    printf("Enumeration: %f ms\n", result * 1e3);
 
     GrB_Matrix_free(&S);
 

@@ -14,6 +14,9 @@ void _gb_mxm_like_partition(GrB_Matrix **C, GrB_Matrix *M, GrB_Matrix *A,
 void _gb_matrix_filter(GrB_Matrix *C, GrB_Matrix *M, GrB_Matrix *B,
                        GrB_Matrix *A, uint64_t v);
 
+void _gb_matrix_filter_v2(GrB_Matrix *C, GrB_Matrix *M, GrB_Matrix *A,
+                          GrB_Matrix *B, uint64_t v);
+
 void mxm_like_partition_ptr(size_t ***IC, size_t **IC_size, size_t ***JC,
                             size_t **JC_size, Record **records,
                             uint64_t record_count, GrB_Matrix *A, bool **plan,
