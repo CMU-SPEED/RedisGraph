@@ -98,7 +98,7 @@ extern "C" void mxm_partition_merge(size_t **IC, size_t *IC_size, size_t **JC,
             std::vector<size_t> M_sorted(M_st, M_st + M_size);
             std::sort(std::begin(M_sorted), std::end(M_sorted));
 
-            mxv_v2(tmp_C, tmp_V, M_sorted.data(), M_sorted.size(), IA_arr,
+            mxv_v1(tmp_C, tmp_V, M_sorted.data(), M_sorted.size(), IA_arr,
                    IA_size, JA_arr, JA_size, VA_arr, VA_size, Ib_st, Ib_size,
                    Vb_st, Vb_size);
 

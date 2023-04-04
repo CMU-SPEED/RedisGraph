@@ -9,9 +9,9 @@ BASEDIR=/sharedstorage/ykerdcha/code/query_benchmark/script/;
 LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$(realpath $BASEDIR/../deps/GraphBLAS/build/);
 
 EXCEPTION="(^.*orkut_adj.*$)"
-CONTAIN="(^.*(as20000102)_adj_IA.*$)"
-# CONTAIN="(^.*(facebook|cit-Patents|oregon1_010526|amazon0302|roadNet-PA|p2p-Gnutella30|email-Enron)_adj_IA.*$)"
+# CONTAIN="(^.*(as20000102)_adj_IA.*$)"
 # CONTAIN="(^.*(roadNet-PA|cit-Patents|ca-GrQc|facebook|oregon1_010526|oregon2_010526|p2p-Gnutella30|email-Enron|as20000102|as-caida20071105|cit-HepTh|email-EuAll|amazon0302|soc-Epinions1|loc-brightkite_edges)_adj_IA.*$)"
+CONTAIN="(^.*(roadNet-PA|facebook|oregon1_010526|oregon2_010526|p2p-Gnutella30|email-Enron|email-EuAll|soc-Epinions1|loc-brightkite_edges)_adj_IA.*$)"
 DATE=$(date -d "today" +"%Y%m%d%H%M")
 SERVER_LOG="/sharedstorage/ykerdcha/data/bfs-se-la/e2e/rg_server_$DATE.log"
 CLIENT_LOG="/sharedstorage/ykerdcha/data/bfs-se-la/e2e/rg_client_$DATE.log"
@@ -55,7 +55,7 @@ do
         echo "✅ Done!";
 
         # for query in 1
-        for query in 0 1 2 3 4 5 6 7 8
+        for query in 0 1 6 7 8
         do
             # for mode in 1 9 10
             for mode in 1 9 10
@@ -75,95 +75,121 @@ do
                     echo "🔄 Running the benchmark for ${graph_name}...";
                     while true;
                     do
+                        # sleep to make sure that redis-server is started nicely
+                        echo "🔄 Sleeping for 15 seconds...";
+                        sleep 15;
+                        echo "✅ Done!";
+
                         echo "<entry>" >> ${CLIENT_LOG};
                         echo "$graph_name | $query | $num_threads | $mode" >> ${CLIENT_LOG};
                         if [ "$mode" = "0" ] || [ "$mode" = "1" ]; then
                             if [ "$query" = "0" ]; then
-                                timeout -s SIGKILL 1000s python3 scripts/benchmark_pattern.py "$graph_name" \
+                                timeout -s SIGKILL 1000s ~/dbms/redis/src/redis-cli \
+                                    --raw graph.profile "$graph_name" \
                                     "MATCH (a)-->(b), (b)-->(c) WHERE a <> b AND a <> c AND b <> c RETURN [a,b,c]" \
                                     >> ${CLIENT_LOG};
                             elif [ "$query" = "1" ]; then
-                                timeout -s SIGKILL 1000s python3 scripts/benchmark_pattern.py "$graph_name" \
+                                timeout -s SIGKILL 1000s ~/dbms/redis/src/redis-cli \
+                                    --raw graph.profile "$graph_name" \
                                     "MATCH (a)-->(b), (a)-->(c), (b)-->(c) WHERE a <> b AND a <> c AND b <> c RETURN [a,b,c]" \
                                     >> ${CLIENT_LOG};
                             elif [ "$query" = "2" ]; then
-                                timeout -s SIGKILL 1000s python3 scripts/benchmark_pattern.py "$graph_name" \
+                                timeout -s SIGKILL 1000s ~/dbms/redis/src/redis-cli \
+                                    --raw graph.profile "$graph_name" \
                                     "MATCH (a)-->(b), (b)-->(c), (c)-->(d) WHERE a <> b AND a <> c AND a <> d AND b <> c AND b <> d AND c <> d RETURN [a,b,c,d]" \
                                     >> ${CLIENT_LOG};
                             elif [ "$query" = "3" ]; then
-                                timeout -s SIGKILL 1000s python3 scripts/benchmark_pattern.py "$graph_name" \
+                                timeout -s SIGKILL 1000s ~/dbms/redis/src/redis-cli \
+                                    --raw graph.profile "$graph_name" \
                                     "MATCH (a)-->(b), (b)-->(c), (c)-->(d), (a)-->(d) WHERE a <> b AND a <> c AND a <> d AND b <> c AND b <> d AND c <> d RETURN [a,b,c,d]" \
                                     >> ${CLIENT_LOG};
                             elif [ "$query" = "4" ]; then
-                                timeout -s SIGKILL 1000s python3 scripts/benchmark_pattern.py "$graph_name" \
+                                timeout -s SIGKILL 1000s ~/dbms/redis/src/redis-cli \
+                                    --raw graph.profile "$graph_name" \
                                     "MATCH (a)-->(b), (b)-->(c), (c)-->(d), (a)-->(d), (b)-->(d) WHERE a <> b AND a <> c AND a <> d AND b <> c AND b <> d AND c <> d RETURN [a,b,c,d]" \
                                     >> ${CLIENT_LOG};
                             elif [ "$query" = "5" ]; then
-                                timeout -s SIGKILL 1000s python3 scripts/benchmark_pattern.py "$graph_name" \
+                                timeout -s SIGKILL 1000s ~/dbms/redis/src/redis-cli \
+                                    --raw graph.profile "$graph_name" \
                                     "MATCH (a)-->(b), (a)-->(c), (a)-->(d), (b)-->(c), (b)-->(d), (c)-->(d) WHERE a <> b AND a <> c AND a <> d AND b <> c AND b <> d AND c <> d RETURN [a,b,c,d]" \
                                     >> ${CLIENT_LOG};
                             elif [ "$query" = "6" ]; then
-                                timeout -s SIGKILL 1000s python3 scripts/benchmark_pattern.py "$graph_name" \
+                                timeout -s SIGKILL 1000s ~/dbms/redis/src/redis-cli \
+                                    --raw graph.profile "$graph_name" \
                                     "MATCH (a)-->(b), (b)-->(c), (c)-->(d), (d)-->(e) WHERE a <> b AND a <> c AND a <> d AND a <> e AND b <> c AND b <> d AND b <> e AND c <> d AND c <> e AND d <> e RETURN [a,b,c,d,e]" \
                                     >> ${CLIENT_LOG};
                             elif [ "$query" = "7" ]; then
-                                timeout -s SIGKILL 1000s python3 scripts/benchmark_pattern.py "$graph_name" \
+                                timeout -s SIGKILL 1000s ~/dbms/redis/src/redis-cli \
+                                    --raw graph.profile "$graph_name" \
                                     "MATCH (a)-->(b), (b)-->(c), (c)-->(d), (d)-->(e), (e)-->(a) WHERE a <> b AND a <> c AND a <> d AND a <> e AND b <> c AND b <> d AND b <> e AND c <> d AND c <> e AND d <> e RETURN [a,b,c,d,e]" \
                                     >> ${CLIENT_LOG};
                             else
-                                timeout -s SIGKILL 1000s python3 scripts/benchmark_pattern.py "$graph_name" \
+                                timeout -s SIGKILL 1000s ~/dbms/redis/src/redis-cli \
+                                    --raw graph.profile "$graph_name" \
                                     "MATCH (a)-->(b), (a)-->(c), (a)-->(d), (a)-->(e), (b)-->(c), (b)-->(d), (b)-->(e), (c)-->(d), (c)-->(e), (d)-->(e) WHERE a <> b AND a <> c AND a <> d AND a <> e AND b <> c AND b <> d AND b <> e AND c <> d AND c <> e AND d <> e RETURN [a,b,c,d,e]" \
                                     >> ${CLIENT_LOG};
                             fi
                         elif [ "$mode" = "2" ]; then
                             if [ "$query" = "0" ]; then
-                                timeout -s SIGKILL 1000s python3 scripts/benchmark_pattern.py "$graph_name" \
+                                timeout -s SIGKILL 1000s ~/dbms/redis/src/redis-cli \
+                                    --raw graph.profile "$graph_name" \
                                     "MATCH (a)-->(b), (b)-->(c) RETURN [a,b,c]" \
                                     >> ${CLIENT_LOG};
                             elif [ "$query" = "1" ]; then
-                                timeout -s SIGKILL 1000s python3 scripts/benchmark_pattern.py "$graph_name" \
+                                timeout -s SIGKILL 1000s ~/dbms/redis/src/redis-cli \
+                                    --raw graph.profile "$graph_name" \
                                     "MATCH (a)-->(b), (a)-->(c), (b)-->(c) RETURN [a,b,c]" \
                                     >> ${CLIENT_LOG};
                             elif [ "$query" = "2" ]; then
-                                timeout -s SIGKILL 1000s python3 scripts/benchmark_pattern.py "$graph_name" \
+                                timeout -s SIGKILL 1000s ~/dbms/redis/src/redis-cli \
+                                    --raw graph.profile "$graph_name" \
                                     "MATCH (a)-->(b), (b)-->(c), (c)-->(d) RETURN [a,b,c,d]" \
                                     >> ${CLIENT_LOG};
                             elif [ "$query" = "3" ]; then
-                                timeout -s SIGKILL 1000s python3 scripts/benchmark_pattern.py "$graph_name" \
+                                timeout -s SIGKILL 1000s ~/dbms/redis/src/redis-cli \
+                                    --raw graph.profile "$graph_name" \
                                     "MATCH (a)-->(b), (b)-->(c), (c)-->(d), (a)-->(d) RETURN [a,b,c,d]" \
                                     >> ${CLIENT_LOG};
                             elif [ "$query" = "4" ]; then
-                                timeout -s SIGKILL 1000s python3 scripts/benchmark_pattern.py "$graph_name" \
+                                timeout -s SIGKILL 1000s ~/dbms/redis/src/redis-cli \
+                                    --raw graph.profile "$graph_name" \
                                     "MATCH (a)-->(b), (b)-->(c), (c)-->(d), (a)-->(d), (b)-->(d) RETURN [a,b,c,d]" \
                                     >> ${CLIENT_LOG};
                             elif [ "$query" = "5" ]; then
-                                timeout -s SIGKILL 1000s python3 scripts/benchmark_pattern.py "$graph_name" \
+                                timeout -s SIGKILL 1000s ~/dbms/redis/src/redis-cli \
+                                    --raw graph.profile "$graph_name" \
                                     "MATCH (a)-->(b), (a)-->(c), (a)-->(d), (b)-->(c), (b)-->(d), (c)-->(d) RETURN [a,b,c,d]" \
                                     >> ${CLIENT_LOG};
                             elif [ "$query" = "6" ]; then
-                                timeout -s SIGKILL 1000s python3 scripts/benchmark_pattern.py "$graph_name" \
+                                timeout -s SIGKILL 1000s ~/dbms/redis/src/redis-cli \
+                                    --raw graph.profile "$graph_name" \
                                     "MATCH (a)-->(b), (b)-->(c), (c)-->(d), (d)-->(e) RETURN [a,b,c,d,e]" \
                                     >> ${CLIENT_LOG};
                             elif [ "$query" = "7" ]; then
-                                timeout -s SIGKILL 1000s python3 scripts/benchmark_pattern.py "$graph_name" \
+                                timeout -s SIGKILL 1000s ~/dbms/redis/src/redis-cli \
+                                    --raw graph.profile "$graph_name" \
                                     "MATCH (a)-->(b), (b)-->(c), (c)-->(d), (d)-->(e), (e)-->(a) RETURN [a,b,c,d,e]" \
                                     >> ${CLIENT_LOG};
                             else
-                                timeout -s SIGKILL 1000s python3 scripts/benchmark_pattern.py "$graph_name" \
+                                timeout -s SIGKILL 1000s ~/dbms/redis/src/redis-cli \
+                                    --raw graph.profile "$graph_name" \
                                     "MATCH (a)-->(b), (a)-->(c), (a)-->(d), (a)-->(e), (b)-->(c), (b)-->(d), (b)-->(e), (c)-->(d), (c)-->(e), (d)-->(e) RETURN [a,b,c,d,e]" \
                                     >> ${CLIENT_LOG};
                             fi
                         else
                             if [ "$query" = "0" ] || [ "$query" = "1" ]; then
-                                timeout -s SIGKILL 1000s python3 scripts/benchmark_pattern.py "$graph_name" \
+                                timeout -s SIGKILL 1000s ~/dbms/redis/src/redis-cli \
+                                    --raw graph.profile "$graph_name" \
                                     "MATCH (a)-->(b), (b)-->(c) RETURN [a,b,c]" \
                                     >> ${CLIENT_LOG};
                             elif [ "$query" = "2" ] || [ "$query" = "3" ] || [ "$query" = "4" ] || [ "$query" = "5" ]; then
-                                timeout -s SIGKILL 1000s python3 scripts/benchmark_pattern.py "$graph_name" \
+                                timeout -s SIGKILL 1000s ~/dbms/redis/src/redis-cli \
+                                    --raw graph.profile "$graph_name" \
                                     "MATCH (a)-->(b), (b)-->(c), (c)-->(d) RETURN [a,b,c,d]" \
                                     >> ${CLIENT_LOG};
                             else
-                                timeout -s SIGKILL 1000s python3 scripts/benchmark_pattern.py "$graph_name" \
+                                timeout -s SIGKILL 1000s ~/dbms/redis/src/redis-cli \
+                                    --raw graph.profile "$graph_name" \
                                     "MATCH (a)-->(b), (b)-->(c), (c)-->(d), (d)-->(e) RETURN [a,b,c,d,e]" \
                                     >> ${CLIENT_LOG};
                             fi
@@ -171,10 +197,6 @@ do
                         
                         echo $(tail -2 ${CLIENT_LOG});
                         if [[ "$(tail -2 ${CLIENT_LOG})" == *"LOADING"* ]]; then
-                            # sleep to make sure that redis-server is started nicely
-                            echo "🔄 Sleeping for 15 seconds...";
-                            sleep 15;
-                            echo "✅ Done!";
                             continue;
                         else
                             echo "</entry>" >> ${CLIENT_LOG};
@@ -223,5 +245,6 @@ do
         sleep 15;
         tmux kill-session -t "redisgraph";
         echo "✅ Done!";
+
     fi;
 done;

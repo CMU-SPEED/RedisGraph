@@ -1,0 +1,101 @@
+{
+ "Metadata": "",
+ "Clients": 50,
+ "MaxRps": 0,
+ "RandomSeed": 12345,
+ "BenchmarkConfiguredCommandsLimit": 1,
+ "IssuedCommands": 1,
+ "BenchmarkFullyRun": true,
+ "TestDescription": "",
+ "DBSpecificConfigs": {
+  "RedisGraphVersion": 999999
+ },
+ "StartTime": 1680583568325,
+ "EndTime": 1680583758337,
+ "DurationMillis": 190011,
+ "Totals": {
+  "MATCH (y)--\u003e(x), (y)--\u003e(z), (z)--\u003e(y), (z)--\u003e(x) RETURN [x,y,z]": {
+   "Errors": 0,
+   "IssuedQueries": 1,
+   "LabelsAdded": 0,
+   "NodesCreated": 0,
+   "NodesDeleted": 0,
+   "PropertiesSet": 0,
+   "RelationshipsCreated": 0,
+   "RelationshipsDeleted": 0
+  },
+  "Total": {
+   "Errors": 0,
+   "IssuedQueries": 1,
+   "LabelsAdded": 0,
+   "NodesCreated": 0,
+   "NodesDeleted": 0,
+   "PropertiesSet": 0,
+   "RelationshipsCreated": 0,
+   "RelationshipsDeleted": 0
+  }
+ },
+ "OverallQueryRates": {
+  "MATCH (y)--\u003e(x), (y)--\u003e(z), (z)--\u003e(y), (z)--\u003e(x) RETURN [x,y,z]": 0.005262834555100897,
+  "Total": 0.005262834555100897
+ },
+ "OverallClientLatencies": {
+  "MATCH (y)--\u003e(x), (y)--\u003e(z), (z)--\u003e(y), (z)--\u003e(x) RETURN [x,y,z]": {
+   "avg": 188108.8,
+   "q0": 0,
+   "q100": 188112.895,
+   "q50": 188112.895,
+   "q95": 188112.895,
+   "q99": 188112.895,
+   "q999": 188112.895
+  },
+  "Total": {
+   "avg": 188108.8,
+   "q0": 0,
+   "q100": 188112.895,
+   "q50": 188112.895,
+   "q95": 188112.895,
+   "q99": 188112.895,
+   "q999": 188112.895
+  }
+ },
+ "OverallGraphInternalLatencies": {
+  "MATCH (y)--\u003e(x), (y)--\u003e(z), (z)--\u003e(y), (z)--\u003e(x) RETURN [x,y,z]": {
+   "avg": 98236.416,
+   "q0": 0,
+   "q100": 98238.463,
+   "q50": 98238.463,
+   "q95": 98238.463,
+   "q99": 98238.463,
+   "q999": 98238.463
+  },
+  "Total": {
+   "avg": 98236.416,
+   "q0": 0,
+   "q100": 98238.463,
+   "q50": 98238.463,
+   "q95": 98238.463,
+   "q99": 98238.463,
+   "q999": 98238.463
+  }
+ },
+ "OverallRelativeInternalExternalLatencyDiff": {
+  "avg": 1.9148581316321638,
+  "q100": 1.9148599159170474,
+  "q50": 1.9148599159170474,
+  "q95": 1.9148599159170474,
+  "q99": 1.9148599159170474,
+  "q999": 1.9148599159170474
+ },
+ "OverallAbsoluteInternalExternalLatencyDiff": {
+  "avg": 89872.38399999999,
+  "q0": 0,
+  "q100": 89874.43199999999,
+  "q50": 89874.43199999999,
+  "q95": 89874.43199999999,
+  "q99": 89874.43199999999,
+  "q999": 89874.43199999999
+ },
+ "ClientRunTimeStats": null,
+ "ServerRunTimeStats": null
+}
