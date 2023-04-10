@@ -9,9 +9,9 @@ BASEDIR=/sharedstorage/ykerdcha/code/query_benchmark/script/;
 LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$(realpath $BASEDIR/../deps/GraphBLAS/build/);
 
 EXCEPTION="(^.*orkut_adj.*$)"
-# CONTAIN="(^.*(ca-GrQc)_adj_IA.*$)"
+CONTAIN="(^.*(ca-GrQc)_adj_IA.*$)"
 # CONTAIN="(^.*(facebook|cit-Patents|oregon1_010526|amazon0302|roadNet-PA|p2p-Gnutella30|email-Enron)_adj_IA.*$)"
-CONTAIN="(^.*(roadNet-PA|cit-Patents|ca-GrQc|facebook|oregon1_010526|oregon2_010526|p2p-Gnutella30|email-Enron|as20000102|as-caida20071105|cit-HepTh|email-EuAll|amazon0302|soc-Epinions1|loc-brightkite_edges)_adj_IA.*$)"
+# CONTAIN="(^.*(roadNet-PA|cit-Patents|ca-GrQc|facebook|oregon1_010526|oregon2_010526|p2p-Gnutella30|email-Enron|as20000102|as-caida20071105|cit-HepTh|email-EuAll|amazon0302|soc-Epinions1|loc-brightkite_edges)_adj_IA.*$)"
 DATE=$(date -d "today" +"%Y%m%d%H%M")
 SERVER_LOG="/sharedstorage/ykerdcha/data/bfs-se-la/e2e/rg_server_$DATE.log"
 CLIENT_LOG="/sharedstorage/ykerdcha/data/bfs-se-la/e2e/rg_client_$DATE.log"

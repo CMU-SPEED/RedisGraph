@@ -56,6 +56,9 @@ SIValue *Proc_LabelsStep
 	Schema *s = GraphContext_GetSchemaByID(pdata->gc, pdata->schema_id++, SCHEMA_NODE);
 	char *label = (char *)Schema_GetName(s);
 	pdata->output[0] = SI_ConstStringVal(label);
+
+	printf("%d - %s\n", pdata->schema_id, Schema_GetName(s));
+
 	return pdata->output;
 }
 

@@ -55,6 +55,8 @@ typedef struct {
     CSRRecord *prev_R;
     RG_Matrix *prev_gbR;
     NodeID prev_ID;
+    QGNode *dest_v;
+    QGEdge *dest_e;
     EdgeTraverseCtx
         *edge_ctx;  // Edge collection data if the edge needs to be set.
     RG_MatrixTupleIter iter;  // Iterator over M.
@@ -65,6 +67,8 @@ typedef struct {
     uint record_cap;          // Max number of records to process.
     Record *records;          // Array of records.
     Record r;                 // Currently selected record.
+
+    size_t num_prev_vertices;
 } OpCondTraverse;
 
 /* Creates a new Traverse operation */

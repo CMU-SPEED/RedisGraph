@@ -53,6 +53,9 @@ SIValue *Proc_RelationsStep
 	// get schema name
 	Schema *s = GraphContext_GetSchemaByID(pdata->gc, pdata->schema_id++, SCHEMA_EDGE);
 	pdata->output[0] = SI_ConstStringVal(Schema_GetName(s));
+
+	printf("%d - %s\n", pdata->schema_id, Schema_GetName(s));
+
 	return pdata->output;
 }
 
