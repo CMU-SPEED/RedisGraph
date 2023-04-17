@@ -5,6 +5,22 @@ if len(sys.argv) != 3:
     print("Command: python3 mode_change.py [TRAVERSE_MODE_ID] [QUERY_PLAN_ID]")
     exit(0)
 
+# Change Expand Into
+if int(sys.argv[1]) > 0:
+    original = open(f"/home/ykerdcha/RedisGraph/src/execution_plan/ops/op_expand_into.c.my", "r")
+else:
+    original = open(f"/home/ykerdcha/RedisGraph/src/execution_plan/ops/op_expand_into.c.og", "r")
+
+modified = open("/home/ykerdcha/RedisGraph/src/execution_plan/ops/op_expand_into_modified.c", "w")
+
+for line in original:
+    modified.write(line)
+
+os.unlink("/home/ykerdcha/RedisGraph/src/execution_plan/ops/op_expand_into.c")
+os.rename("/home/ykerdcha/RedisGraph/src/execution_plan/ops/op_expand_into_modified.c", "/home/ykerdcha/RedisGraph/src/execution_plan/ops/op_expand_into.c")
+
+
+# Change Conditional Traverse
 original = open(f"/home/ykerdcha/RedisGraph/src/execution_plan/ops/op_conditional_traverse.c.{sys.argv[1]}", "r")
 modified = open("/home/ykerdcha/RedisGraph/src/execution_plan/ops/op_conditional_traverse_modified.c", "w")
 

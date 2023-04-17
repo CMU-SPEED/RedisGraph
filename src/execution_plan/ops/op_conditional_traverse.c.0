@@ -102,9 +102,6 @@ OpBase *NewCondTraverseOp(const ExecutionPlan *plan, Graph *g,
         // prepare all necessary information for collecting matching edges
         uint edge_idx = OpBase_Modifies((OpBase *)op, edge);
         QGEdge *e = QueryGraph_GetEdgeByAlias(plan->query_graph, edge);
-
-        printf("%d - %s\n", e->reltypeIDs[0], edge);
-
         op->edge_ctx = EdgeTraverseCtx_New(ae, e, edge_idx);
     }
 
@@ -198,10 +195,10 @@ static Record CondTraverseConsume(OpBase *opBase) {
         EdgeTraverseCtx_SetEdge(op->edge_ctx, op->r);
     }
 
-    // size_t record_str_cap = 0;
-	// char *record_str = NULL;
-	// size_t record_str_len = Record_ToString(op->r, &record_str, &record_str_cap);
-    // printf("[0] Record %s\n", record_str);
+    size_t record_str_cap = 0;
+	char *record_str = NULL;
+	size_t record_str_len = Record_ToString(op->r, &record_str, &record_str_cap);
+    printf("[0] Record %s\n", record_str);
 
     return OpBase_CloneRecord(op->r);
 }

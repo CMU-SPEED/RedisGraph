@@ -36,21 +36,6 @@ static void CondTraverseToString(const OpBase *ctx, sds *buf) {
     TraversalToString(ctx, buf, ((const OpCondTraverse *)ctx)->ae);
 }
 
-static void _populate_filter_matrix(OpCondTraverse *op) {
-    GrB_Matrix FM = RG_MATRIX_M(op->F);
-
-    // clear filter matrix
-    GrB_Matrix_clear(FM);
-
-    // update filter matrix F, set row i at position srcId
-    // F[i, srcId] = true
-    for (uint i = 0; i < op->record_count; i++) {
-        Record r = op->records[i];
-        Node *n = Record_GetNode(r, op->srcNodeIdx);
-        NodeID srcId = ENTITY_GET_ID(n);
-        GrB_Matrix_setElement_BOOL(FM, true, i, srcId);
-    }
-}
 void _traverse(OpCondTraverse *op) {
     GrB_Info info;
 
@@ -68,13 +53,32 @@ void _traverse(OpCondTraverse *op) {
     R = *(op->prev_gbR);
     RG_Matrix_wait(R, true);
 
+    GxB_Matrix_fprint(R->matrix, "R", GxB_SHORT, stdout);
+
     GrB_Index R_nrows, R_ncols;
     GrB_Matrix_nrows(&R_nrows, R->matrix);
     GrB_Matrix_ncols(&R_ncols, R->matrix);
 
     printf("Got previous result matrix\n");
 
-    // 2. Extract selection matrices
+    // 1.5 Initialize filter matrices
+    bool filter_map[100];
+    for (size_t i = 0; i < 100; i++) {
+        filter_map[i] = false;
+    }
+    for (size_t i = 0;; i++) {
+        if (NEGATIVE_VERTICES[QPLAN_ID][op->destNodeIdx][i] == -1) {
+            break;
+        }
+        filter_map[NEGATIVE_VERTICES[QPLAN_ID][op->destNodeIdx][i]] = true;
+        printf("Filter %lu\n", NEGATIVE_VERTICES[QPLAN_ID][op->destNodeIdx][i]);
+    }
+
+    // Allocate filter matrices
+    RG_Matrix F = NULL;
+    RG_Matrix_new(&(F), GrB_BOOL, R_nrows, R_ncols);
+
+    // 2. Extract selection matrices (and filter matrices)
     // Count required selection matrices
     size_t nS = 0;
     for (size_t i = 0;; i++) {
@@ -110,11 +114,17 @@ void _traverse(OpCondTraverse *op) {
                 assert(info == GrB_SUCCESS);
             }
         }
+        if (filter_map[value]) {
+            info = GrB_Matrix_setElement_BOOL(F->matrix, true, src_id, dest_id);
+            assert(info == GrB_SUCCESS);
+        }
     }
     for (size_t i = 0; i < nS; i++) {
         RG_Matrix_wait(S[i], true);
-        GxB_Matrix_fprint(S[i]->matrix, "S[i] (Before)", GxB_SHORT, stdout);
     }
+    RG_Matrix_wait(F, true);
+
+    GxB_Matrix_fprint(F->matrix, "F", GxB_SHORT, stdout);
 
     printf("Extracted selection matrices (nS=%lu)\n", nS);
 
@@ -122,27 +132,30 @@ void _traverse(OpCondTraverse *op) {
     RG_Matrix A[nS];
     for (size_t i = 0; i < nS; i++) {
         A[i] = NULL;
-        RG_Matrix_new(&(A[i]), GrB_BOOL, R_ncols, R_ncols);
         switch (PARTICIPATING_DIRECTION[QPLAN_ID][op->destNodeIdx][i]) {
             case DIR_FB: {
                 RG_Matrix tmp, tmp_T;
-                tmp = Graph_GetRelationMatrix(
-                    op->graph,
-                    PARTICIPATING_RELATIONSHIPS[QPLAN_ID][op->destNodeIdx][i],
-                    false);
-                tmp_T = Graph_GetRelationMatrix(
-                    op->graph,
-                    PARTICIPATING_RELATIONSHIPS[QPLAN_ID][op->destNodeIdx][i],
-                    true);
+                if (PARTICIPATING_RELATIONSHIPS[QPLAN_ID][op->destNodeIdx][i] ==
+                    99999) {
+                    tmp = Graph_GetAdjacencyMatrix(op->graph, false);
+                    tmp_T = Graph_GetAdjacencyMatrix(op->graph, true);
+                } else {
+                    tmp = Graph_GetRelationMatrix(
+                        op->graph,
+                        PARTICIPATING_RELATIONSHIPS[QPLAN_ID][op->destNodeIdx]
+                                                   [i],
+                        false);
+                    tmp_T = Graph_GetRelationMatrix(
+                        op->graph,
+                        PARTICIPATING_RELATIONSHIPS[QPLAN_ID][op->destNodeIdx]
+                                                   [i],
+                        true);
+                }
                 RG_Matrix_wait(tmp, true);
                 RG_Matrix_wait(tmp_T, true);
                 RG_Matrix_resize(tmp, R_ncols, R_ncols);
                 RG_Matrix_resize(tmp_T, R_ncols, R_ncols);
-                printf(
-                    "%d\n",
-                    PARTICIPATING_RELATIONSHIPS[QPLAN_ID][op->destNodeIdx][i]);
-                GxB_Matrix_fprint(tmp->matrix, "tmp", GxB_SHORT, stdout);
-                GxB_Matrix_fprint(tmp_T->matrix, "tmp_T", GxB_SHORT, stdout);
+                RG_Matrix_new(&(A[i]), GrB_BOOL, R_ncols, R_ncols);
                 info = GrB_Matrix_eWiseAdd_BinaryOp(
                     A[i]->matrix, GrB_NULL, GrB_NULL, GrB_LOR, tmp->matrix,
                     tmp_T->matrix, GrB_NULL);
@@ -150,71 +163,104 @@ void _traverse(OpCondTraverse *op) {
                 break;
             }
             case DIR_F: {
-                A[i] = Graph_GetRelationMatrix(
-                    op->graph,
-                    PARTICIPATING_RELATIONSHIPS[QPLAN_ID][op->destNodeIdx][i],
-                    false);
+                if (PARTICIPATING_RELATIONSHIPS[QPLAN_ID][op->destNodeIdx][i] ==
+                    99999) {
+                    A[i] = Graph_GetAdjacencyMatrix(op->graph, false);
+                } else {
+                    A[i] = Graph_GetRelationMatrix(
+                        op->graph,
+                        PARTICIPATING_RELATIONSHIPS[QPLAN_ID][op->destNodeIdx]
+                                                   [i],
+                        false);
+                }
+
                 break;
             }
             case DIR_B: {
-                printf("A[%d] = %d\n", i, PARTICIPATING_RELATIONSHIPS[QPLAN_ID][op->destNodeIdx][i]);
-                A[i] = Graph_GetRelationMatrix(
-                    op->graph,
-                    PARTICIPATING_RELATIONSHIPS[QPLAN_ID][op->destNodeIdx][i],
-                    true);
+                if (PARTICIPATING_RELATIONSHIPS[QPLAN_ID][op->destNodeIdx][i] ==
+                    99999) {
+                    A[i] = Graph_GetAdjacencyMatrix(op->graph, true);
+                } else {
+                    A[i] = Graph_GetRelationMatrix(
+                        op->graph,
+                        PARTICIPATING_RELATIONSHIPS[QPLAN_ID][op->destNodeIdx]
+                                                   [i],
+                        true);
+                }
                 break;
             }
         }
         RG_Matrix_wait(A[i], true);
         RG_Matrix_resize(A[i], R_ncols, R_ncols);
-        GxB_Matrix_fprint(A[i]->matrix, "A[i] (Before)", GxB_SHORT, stdout);
     }
 
     printf("Extracted relation matrices\n");
 
     // 4. Filter with participating vertices
     for (size_t i = 0; i < nS; i++) {
-        info = RG_mxm(S[i], GrB_LOR_LAND_SEMIRING_BOOL, S[i], A[i]);
+        info = GrB_mxm(S[i]->matrix, F->matrix, GrB_NULL,
+                       GrB_LOR_LAND_SEMIRING_BOOL, S[i]->matrix, A[i]->matrix,
+                       GrB_DESC_C);
         assert(info == GrB_SUCCESS);
-        RG_Matrix_free(&(A[i]));
-        GxB_Matrix_fprint(S[i]->matrix, "S[i] (After)", GxB_SHORT, stdout);
+
+        RG_Matrix_wait(S[i], true);
+        GxB_Matrix_fprint(S[i]->matrix, "S[i]", GxB_SHORT, stdout);
     }
+    RG_Matrix_free(&F);
 
     printf("Filtered participating vertices\n");
 
     // 5. Intersect all participating matrices
     op->M = S[0];
     for (size_t i = 1; i < nS; i++) {
-        RG_Matrix_wait(S[i], true);
-        info = GrB_Matrix_eWiseMult_BinaryOp(op->M->matrix, GrB_NULL, GrB_NULL,
-                                             GrB_LAND, op->M->matrix,
-                                             S[i]->matrix, GrB_NULL);
+        if (EDGE_POLARITY[QPLAN_ID][op->destNodeIdx][i] == DIR_POS) {
+            // M = M . S
+            printf("M = M . S\n");
+            info = GrB_Matrix_eWiseMult_BinaryOp(
+                op->M->matrix, GrB_NULL, GrB_NULL, GrB_LAND, op->M->matrix,
+                S[i]->matrix, GrB_NULL);
+        } else if (EDGE_POLARITY[QPLAN_ID][op->destNodeIdx][i] == DIR_NEG) {
+            // M = M . ~S
+            printf("M = M . ~S\n");
+            info = GrB_Matrix_select_BOOL(op->M->matrix, S[i]->matrix, GrB_NULL,
+                                          GrB_VALUEEQ_BOOL, op->M->matrix, true,
+                                          GrB_DESC_RC);
+        }
+
         assert(info == GrB_SUCCESS);
         RG_Matrix_free(&(S[i]));
     }
 
     printf("Intersected participating matrices\n");
 
+    RG_Matrix_wait(op->M, true);
+    GxB_Matrix_fprint(op->M->matrix, "C (Intermediate)", GxB_SHORT, stdout);
+
     // 6. Get target matrix
-    RG_Matrix L;
-    L = Graph_GetLabelMatrix(op->graph,
-                             TARGET_LABEL[QPLAN_ID][op->destNodeIdx]);
-    RG_Matrix_wait(L, true);
-    RG_Matrix_resize(L, R_ncols, R_ncols);
+    if (TARGET_LABEL[QPLAN_ID][op->destNodeIdx] != 99999) {
+        // If there is a target matrix
+        RG_Matrix L;
+        L = Graph_GetLabelMatrix(op->graph,
+                                 TARGET_LABEL[QPLAN_ID][op->destNodeIdx]);
+        RG_Matrix_wait(L, true);
+        RG_Matrix_resize(L, R_ncols, R_ncols);
 
-    printf("Got target matrix\n");
+        printf("Got target matrix\n");
 
-    // 7. Filter with target label
-    info = RG_mxm(op->M, GrB_LOR_LAND_SEMIRING_BOOL, op->M, L);
-    assert(info == GrB_SUCCESS);
+        // 7. Filter with target label
+        info = RG_mxm(op->M, GrB_LOR_LAND_SEMIRING_BOOL, op->M, L);
+        assert(info == GrB_SUCCESS);
 
-    printf("Filtered with target label\n");
+        printf("Filtered with target label\n");
+    }
 
     RG_Matrix_wait(op->M, true);
     RG_MatrixTupleIter_attach(&op->iter, op->M);
     RG_MatrixTupleIter_attach(&op->iter_R, *(op->prev_gbR));
 
     op->IC_list = (size_t **)1;
+
+    GxB_Matrix_fprint(op->M->matrix, "C", GxB_SHORT, stdout);
 }
 
 OpBase *NewCondTraverseOp(const ExecutionPlan *plan, Graph *g,
@@ -439,7 +485,6 @@ static Record CondTraverseConsume(OpBase *opBase) {
                 assert(destR_id != INVALID_ENTITY_ID);
 
                 node_map[valueR] = destR_id;
-                // printf("\t|- Map - node_map[%d] = %d\n", valueR, destR_id);
 
                 // Create a record
                 Node node = GE_NEW_NODE();
@@ -452,9 +497,15 @@ static Record CondTraverseConsume(OpBase *opBase) {
 
             while (cur->type == OPType_CONDITIONAL_TRAVERSE) {
                 OpCondTraverse *cur_traverse = (OpCondTraverse *)cur;
+                // printf("Map [%d,%d] (%d) - [%d,%d]\n", cur_traverse->srcNodeIdx,
+                //        cur_traverse->destNodeIdx,
+                //        cur_traverse->edge_ctx->direction,
+                //        node_map[cur_traverse->srcNodeIdx],
+                //        node_map[cur_traverse->destNodeIdx]);
                 EdgeTraverseCtx_CollectEdges(
                     cur_traverse->edge_ctx, node_map[cur_traverse->srcNodeIdx],
                     node_map[cur_traverse->destNodeIdx]);
+                // printf("setting\n");
                 EdgeTraverseCtx_SetEdge(cur_traverse->edge_ctx, op->r);
                 cur = cur->children[0];
             }
@@ -485,7 +536,7 @@ static Record CondTraverseConsume(OpBase *opBase) {
         // char *record_str = NULL;
         // size_t record_str_len =
         //     Record_ToString(op->r, &record_str, &record_str_cap);
-        // printf("    |- [12] Record %s\n", record_str);
+        // printf("[Traverse] Record %s\n", record_str);
 
         // Send the clone
         return OpBase_CloneRecord(op->r);
@@ -559,13 +610,7 @@ static Record CondTraverseConsume(OpBase *opBase) {
                     if (info != GrB_SUCCESS) {
                         break;
                     }
-                    // printf("%d %d\n", srcR_id, src_id);
                 }
-
-                // if (srcR_id > src_id) {
-                //     info = GxB_EXHAUSTED;
-                //     break;
-                // }
 
                 assert(srcR_id == src_id);
                 assert(destR_id != INVALID_ENTITY_ID);
@@ -573,6 +618,7 @@ static Record CondTraverseConsume(OpBase *opBase) {
                 // Set the materialized matrix
                 GrB_Matrix_setElement_UINT64((*output_matrix)->matrix, valueR,
                                              output_nrow, destR_id);
+                // printf("A[%d,%d] <- %d\n", output_nrow, destR_id, valueR);
             }
 
             // If we broke, break the loop
@@ -583,12 +629,18 @@ static Record CondTraverseConsume(OpBase *opBase) {
             // Set the candidate into the materialized matrix
             GrB_Matrix_setElement_UINT64((*output_matrix)->matrix,
                                          op->destNodeIdx, output_nrow, dest_id);
+            // printf("A[%d,%d] <- %d\n", output_nrow, dest_id,
+            // op->destNodeIdx);
 
             // Move to the next row in the materialized matrix
             output_nrow++;
         }
 
+        RG_Matrix_wait((*output_matrix), true);
         RG_Matrix_free(op->prev_gbR);
+
+        GxB_Matrix_fprint((*output_matrix)->matrix, "output_matrix", GxB_SHORT,
+                          stdout);
 
         // Return the materialized matrix as a mask for the next iteration
         return (Record)(output_matrix);
@@ -630,11 +682,6 @@ static void CondTraverseFree(OpBase *ctx) {
 
     GrB_Info info = RG_MatrixTupleIter_detach(&op->iter);
     ASSERT(info == GrB_SUCCESS);
-
-    if (op->F != NULL) {
-        RG_Matrix_free(&op->F);
-        op->F = NULL;
-    }
 
     if (op->M != NULL) {
         RG_Matrix_free(&op->M);
