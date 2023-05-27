@@ -1,5 +1,5 @@
 /*start_query_plan*/
-#define QPLAN_ID 6
+#define QPLAN_ID 5
 /*end_query_plan*/
 
 #include "query_plan.h"
@@ -10,6 +10,8 @@
  * or the Server Side Public License v1 (SSPLv1).
  */
 
+#include "op_conditional_traverse.h"
+
 #include <omp.h>
 #include <time.h>
 
@@ -17,7 +19,6 @@
 #include "../../subgraph_enumeration/subgraph_enumeration.hpp"
 #include "../../util/simple_timer.h"
 #include "RG.h"
-#include "op_conditional_traverse.h"
 #include "shared/print_functions.h"
 
 // default number of records to accumulate before traversing
@@ -36,231 +37,131 @@ static void CondTraverseToString(const OpBase *ctx, sds *buf) {
     TraversalToString(ctx, buf, ((const OpCondTraverse *)ctx)->ae);
 }
 
-void _traverse(OpCondTraverse *op) {
-    GrB_Info info;
+static void _populate_filter_matrix(OpCondTraverse *op) {
+    GrB_Matrix FM = RG_MATRIX_M(op->F);
 
-    // 0. Initialize
-    size_t required_dim = Graph_RequiredMatrixDim(op->graph);
-    RG_Matrix_new(&op->M, GrB_BOOL, op->record_cap, required_dim);
+    // clear filter matrix
+    GrB_Matrix_clear(FM);
+
+    // update filter matrix F, set row i at position srcId
+    // F[i, srcId] = true
+    for (uint i = 0; i < op->record_count; i++) {
+        Record r = op->records[i];
+        Node *n = Record_GetNode(r, op->srcNodeIdx);
+        NodeID srcId = ENTITY_GET_ID(n);
+        GrB_Matrix_setElement_BOOL(FM, true, i, srcId);
+    }
+}
+void _traverse(OpCondTraverse *op) {
+    // printf("Traverse\n");
+
+    // if op->F is null, this is the first time we are traversing
+    if (op->F == NULL) {
+        // create both filter and result matrices
+        size_t required_dim = Graph_RequiredMatrixDim(op->graph);
+        RG_Matrix_new(&op->M, GrB_BOOL, op->record_cap, required_dim);
+        RG_Matrix_new(&op->F, GrB_BOOL, op->record_cap, required_dim);
+
+        // prepend filter matrix to algebraic expression as the leftmost operand
+        AlgebraicExpression_MultiplyToTheLeft(&op->ae, op->F);
+
+        // optimize the expression tree
+        AlgebraicExpression_Optimize(&op->ae);
+    }
 
     double result = 0.0;
     double tic[2];
 
-    printf("Initialized (dest=%lu)\n", op->destNodeIdx);
-
-    // 1. Get previous result matrix
-    RG_Matrix R;
-    R = *(op->prev_gbR);
-    RG_Matrix_wait(R, true);
-
-    GxB_Matrix_fprint(R->matrix, "R", GxB_SHORT, stdout);
-
-    GrB_Index R_nrows, R_ncols;
-    GrB_Matrix_nrows(&R_nrows, R->matrix);
-    GrB_Matrix_ncols(&R_ncols, R->matrix);
-
-    printf("Got previous result matrix\n");
-
-    // 1.5 Initialize filter matrices
-    bool filter_map[100];
-    for (size_t i = 0; i < 100; i++) {
-        filter_map[i] = false;
-    }
-    for (size_t i = 0;; i++) {
-        if (NEGATIVE_VERTICES[QPLAN_ID][op->destNodeIdx][i] == -1) {
-            break;
+    // For outputs
+    size_t num_threads = op->M_list_cap;
+    size_t **IC_list = NULL, *IC_size_list = NULL;
+    size_t **JC_list = NULL, *JC_size_list = NULL;
+    size_t *IB_arr = NULL, *JB_arr = NULL, IB_size = 0, JB_size = 0;
+    printf("Preparation: ");
+    simple_tic(tic);
+    {
+        IC_list = (size_t **)malloc(sizeof(size_t *) * num_threads);
+        if (IC_list == NULL) {
+            return;
         }
-        filter_map[NEGATIVE_VERTICES[QPLAN_ID][op->destNodeIdx][i]] = true;
-        printf("Filter %lu\n", NEGATIVE_VERTICES[QPLAN_ID][op->destNodeIdx][i]);
-    }
-
-    // Allocate filter matrices
-    RG_Matrix F = NULL;
-    RG_Matrix_new(&(F), GrB_BOOL, R_nrows, R_ncols);
-
-    // 2. Extract selection matrices (and filter matrices)
-    // Count required selection matrices
-    size_t nS = 0;
-    for (size_t i = 0;; i++) {
-        if (PARTICIPATING_VERTICES[QPLAN_ID][op->destNodeIdx][i] == -1) {
-            break;
+        IC_size_list = (size_t *)malloc(sizeof(size_t) * num_threads);
+        if (IC_size_list == NULL) {
+            return;
         }
-        nS++;
-    }
-
-    // Allocate selection matrices
-    RG_Matrix S[nS];
-    for (size_t i = 0; i < nS; i++) {
-        S[i] = NULL;
-        RG_Matrix_new(&(S[i]), GrB_BOOL, R_nrows, R_ncols);
-    }
-
-    // Initialize selection matrices
-    RG_MatrixTupleIter_attach(&op->iter, R);
-
-    NodeID src_id = INVALID_ENTITY_ID, dest_id = INVALID_ENTITY_ID;
-    uint64_t value = 0;
-
-    while (true) {
-        GrB_Info info = RG_MatrixTupleIter_next_UINT64(&op->iter, &src_id,
-                                                       &dest_id, &value);
-        if (info != GrB_SUCCESS) {
-            break;
+        JC_list = (size_t **)malloc(sizeof(size_t *) * num_threads);
+        if (JC_list == NULL) {
+            return;
         }
-        for (size_t i = 0; i < nS; i++) {
-            if (value == PARTICIPATING_VERTICES[QPLAN_ID][op->destNodeIdx][i]) {
-                info = GrB_Matrix_setElement_BOOL(S[i]->matrix, true, src_id,
-                                                  dest_id);
-                assert(info == GrB_SUCCESS);
-            }
+        JC_size_list = (size_t *)malloc(sizeof(size_t) * num_threads);
+        if (JC_size_list == NULL) {
+            return;
         }
-        if (filter_map[value]) {
-            info = GrB_Matrix_setElement_BOOL(F->matrix, true, src_id, dest_id);
-            assert(info == GrB_SUCCESS);
+
+        size_t num_vertices = op->prev_R->J_size / (op->prev_R->I_size - 1);
+        size_t plan_nnz = 0;
+        for (size_t i = 0; i < num_vertices; i++) {
+            // For clique
+            if (QPLAN[QPLAN_ID][op->destNodeIdx][i]) plan_nnz++;
         }
-    }
-    for (size_t i = 0; i < nS; i++) {
-        RG_Matrix_wait(S[i], true);
-    }
-    RG_Matrix_wait(F, true);
 
-    GxB_Matrix_fprint(F->matrix, "F", GxB_SHORT, stdout);
+        // Build B from records and plan
+        IB_size = op->prev_R->I_size;
+        JB_size = (op->prev_R->I_size - 1) * plan_nnz;
+        IB_arr = (size_t *)malloc(sizeof(size_t) * IB_size);
+        if (IB_arr == NULL) {
+            return;
+        }
+        JB_arr = (size_t *)malloc(sizeof(size_t) * JB_size);
+        if (JB_arr == NULL) {
+            return;
+        }
 
-    printf("Extracted selection matrices (nS=%lu)\n", nS);
-
-    // 3. Get relation matrices
-    RG_Matrix A[nS];
-    for (size_t i = 0; i < nS; i++) {
-        A[i] = NULL;
-        switch (PARTICIPATING_DIRECTION[QPLAN_ID][op->destNodeIdx][i]) {
-            case DIR_FB: {
-                RG_Matrix tmp, tmp_T;
-                if (PARTICIPATING_RELATIONSHIPS[QPLAN_ID][op->destNodeIdx][i] ==
-                    99999) {
-                    tmp = Graph_GetAdjacencyMatrix(op->graph, false);
-                    tmp_T = Graph_GetAdjacencyMatrix(op->graph, true);
-                } else {
-                    tmp = Graph_GetRelationMatrix(
-                        op->graph,
-                        PARTICIPATING_RELATIONSHIPS[QPLAN_ID][op->destNodeIdx]
-                                                   [i],
-                        false);
-                    tmp_T = Graph_GetRelationMatrix(
-                        op->graph,
-                        PARTICIPATING_RELATIONSHIPS[QPLAN_ID][op->destNodeIdx]
-                                                   [i],
-                        true);
+#pragma omp parallel for num_threads(num_threads)
+        for (size_t i = 0; i < op->prev_R->I_size - 1; i++) {
+            IB_arr[i] = i * plan_nnz;
+            size_t j_idx = 0;
+            for (size_t j = 0; j < num_vertices; j++) {
+                if (QPLAN[QPLAN_ID][op->destNodeIdx][j]) {
+                    JB_arr[i * plan_nnz + j_idx] =
+                        op->prev_R->J[i * num_vertices + j];
+                    j_idx++;
                 }
-                RG_Matrix_wait(tmp, true);
-                RG_Matrix_wait(tmp_T, true);
-                RG_Matrix_resize(tmp, R_ncols, R_ncols);
-                RG_Matrix_resize(tmp_T, R_ncols, R_ncols);
-                RG_Matrix_new(&(A[i]), GrB_BOOL, R_ncols, R_ncols);
-                info = GrB_Matrix_eWiseAdd_BinaryOp(
-                    A[i]->matrix, GrB_NULL, GrB_NULL, GrB_LOR, tmp->matrix,
-                    tmp_T->matrix, GrB_NULL);
-                assert(info == GrB_SUCCESS);
-                break;
-            }
-            case DIR_F: {
-                if (PARTICIPATING_RELATIONSHIPS[QPLAN_ID][op->destNodeIdx][i] ==
-                    99999) {
-                    A[i] = Graph_GetAdjacencyMatrix(op->graph, false);
-                } else {
-                    A[i] = Graph_GetRelationMatrix(
-                        op->graph,
-                        PARTICIPATING_RELATIONSHIPS[QPLAN_ID][op->destNodeIdx]
-                                                   [i],
-                        false);
-                }
-
-                break;
-            }
-            case DIR_B: {
-                if (PARTICIPATING_RELATIONSHIPS[QPLAN_ID][op->destNodeIdx][i] ==
-                    99999) {
-                    A[i] = Graph_GetAdjacencyMatrix(op->graph, true);
-                } else {
-                    A[i] = Graph_GetRelationMatrix(
-                        op->graph,
-                        PARTICIPATING_RELATIONSHIPS[QPLAN_ID][op->destNodeIdx]
-                                                   [i],
-                        true);
-                }
-                break;
             }
         }
-        RG_Matrix_wait(A[i], true);
-        RG_Matrix_resize(A[i], R_ncols, R_ncols);
+        IB_arr[op->prev_R->I_size - 1] = (op->prev_R->I_size - 1) * plan_nnz;
+    }
+    result = simple_toc(tic);
+    printf("%f ms\n", result * 1e3);
+
+    printf("Enumeration: ");
+    simple_tic(tic);
+    {
+        mxm_like_partition_no_conv(
+            &IC_list, &IC_size_list, &JC_list, &JC_size_list, op->prev_R->I,
+            op->prev_R->I_size, op->prev_R->J, op->prev_R->J_size, IB_arr,
+            IB_size, JB_arr, JB_size, &(op->graph->adjacency_matrix->matrix));
+    }
+    result = simple_toc(tic);
+    printf("%f ms\n", result * 1e3);
+
+    free(IB_arr);
+    free(JB_arr);
+
+    // Transfer to the Consume method
+    op->IC_list = IC_list;
+    op->IC_size_list = IC_size_list;
+    op->JC_list = JC_list;
+    op->JC_size_list = JC_size_list;
+
+    op->IM = (uint *)malloc(sizeof(uint) * (num_threads + 1));
+    if (op->IM == NULL) {
+        return;
     }
 
-    printf("Extracted relation matrices\n");
-
-    // 4. Filter with participating vertices
-    for (size_t i = 0; i < nS; i++) {
-        info = GrB_mxm(S[i]->matrix, F->matrix, GrB_NULL,
-                       GrB_LOR_LAND_SEMIRING_BOOL, S[i]->matrix, A[i]->matrix,
-                       GrB_DESC_C);
-        assert(info == GrB_SUCCESS);
-
-        RG_Matrix_wait(S[i], true);
-        GxB_Matrix_fprint(S[i]->matrix, "S[i]", GxB_SHORT, stdout);
+    op->IM[0] = 0;
+    for (size_t i = 0; i < num_threads; i++) {
+        op->IM[i + 1] = IC_size_list[i] - 1 + op->IM[i];
     }
-    RG_Matrix_free(&F);
-
-    printf("Filtered participating vertices\n");
-
-    // 5. Intersect all participating matrices
-    op->M = S[0];
-    for (size_t i = 1; i < nS; i++) {
-        if (EDGE_POLARITY[QPLAN_ID][op->destNodeIdx][i] == DIR_POS) {
-            // M = M . S
-            printf("M = M . S\n");
-            info = GrB_Matrix_eWiseMult_BinaryOp(
-                op->M->matrix, GrB_NULL, GrB_NULL, GrB_LAND, op->M->matrix,
-                S[i]->matrix, GrB_NULL);
-        } else if (EDGE_POLARITY[QPLAN_ID][op->destNodeIdx][i] == DIR_NEG) {
-            // M = M . ~S
-            printf("M = M . ~S\n");
-            info = GrB_Matrix_select_BOOL(op->M->matrix, S[i]->matrix, GrB_NULL,
-                                          GrB_VALUEEQ_BOOL, op->M->matrix, true,
-                                          GrB_DESC_RC);
-        }
-
-        assert(info == GrB_SUCCESS);
-        RG_Matrix_free(&(S[i]));
-    }
-
-    printf("Intersected participating matrices\n");
-
-    RG_Matrix_wait(op->M, true);
-    GxB_Matrix_fprint(op->M->matrix, "C (Intermediate)", GxB_SHORT, stdout);
-
-    // 6. Get target matrix
-    if (TARGET_LABEL[QPLAN_ID][op->destNodeIdx] != 99999) {
-        // If there is a target matrix
-        RG_Matrix L;
-        L = Graph_GetLabelMatrix(op->graph,
-                                 TARGET_LABEL[QPLAN_ID][op->destNodeIdx]);
-        RG_Matrix_wait(L, true);
-        RG_Matrix_resize(L, R_ncols, R_ncols);
-
-        printf("Got target matrix\n");
-
-        // 7. Filter with target label
-        info = RG_mxm(op->M, GrB_LOR_LAND_SEMIRING_BOOL, op->M, L);
-        assert(info == GrB_SUCCESS);
-
-        printf("Filtered with target label\n");
-    }
-
-    RG_Matrix_wait(op->M, true);
-    RG_MatrixTupleIter_attach(&op->iter, op->M);
-    RG_MatrixTupleIter_attach(&op->iter_R, *(op->prev_gbR));
-
-    op->IC_list = (size_t **)1;
-
-    GxB_Matrix_fprint(op->M->matrix, "C", GxB_SHORT, stdout);
 }
 
 OpBase *NewCondTraverseOp(const ExecutionPlan *plan, Graph *g,
@@ -284,15 +185,14 @@ OpBase *NewCondTraverseOp(const ExecutionPlan *plan, Graph *g,
 
     const char *dest = AlgebraicExpression_Dest(ae);
     op->destNodeIdx = OpBase_Modifies((OpBase *)op, dest);
-    op->dest_v = QueryGraph_GetNodeByAlias(plan->query_graph, dest);
 
     const char *edge = AlgebraicExpression_Edge(ae);
     if (edge) {
         // this operation will populate an edge in the Record
         // prepare all necessary information for collecting matching edges
         uint edge_idx = OpBase_Modifies((OpBase *)op, edge);
-        op->dest_e = QueryGraph_GetEdgeByAlias(plan->query_graph, edge);
-        op->edge_ctx = EdgeTraverseCtx_New(ae, op->dest_e, edge_idx);
+        QGEdge *e = QueryGraph_GetEdgeByAlias(plan->query_graph, edge);
+        op->edge_ctx = EdgeTraverseCtx_New(ae, e, edge_idx);
     }
 
     size_t num_threads = omp_get_max_threads();
@@ -308,8 +208,7 @@ OpBase *NewCondTraverseOp(const ExecutionPlan *plan, Graph *g,
     op->iter_i = 0;
     op->iter_j = 0;
 
-    op->prev_gbR = NULL;
-    op->prev_ID = -1;
+    op->prev_R = NULL;
 
     return (OpBase *)op;
 }
@@ -359,12 +258,15 @@ static Record CondTraverseConsume(OpBase *opBase) {
         // If its child is ConditionalTraverse,
         // Take CSR from the child
         if (child->type == OPType_CONDITIONAL_TRAVERSE) {
-            op->prev_gbR = (RG_Matrix *)OpBase_Consume(child);
-            if (op->prev_gbR == NULL) return NULL;
+            // printf("Take R from child\n");
+            op->prev_R = (CSRRecord *)OpBase_Consume(child);
+            if (op->prev_R == NULL) return NULL;
         }
 
         // If not, create CSR from list of records
         else {
+            // printf("Generate R from child\n");
+
             // Consume child's records
             for (op->record_count = 0; op->record_count < op->record_cap;
                  op->record_count++) {
@@ -388,133 +290,150 @@ static Record CondTraverseConsume(OpBase *opBase) {
             // No data.
             if (op->record_count == 0) return NULL;
 
-            uint64_t nrows = op->record_count;
-            uint64_t ncols = op->record_count;
+            // printf("Start generating\n");
 
-            // Initialize prev_R as CSR
-            op->prev_gbR = (RG_Matrix *)malloc(sizeof(RG_Matrix));
-            if (op->prev_gbR == NULL) {
+            uint64_t current_record_size = 0;
+            for (uint j = 0; j < Record_length(op->records[0]); j++) {
+                if (Record_GetType(op->records[0], j) == REC_TYPE_NODE)
+                    current_record_size++;
+            }
+            // printf("current_record_size (%lu)\n", current_record_size);
+
+            op->prev_R = (CSRRecord *)malloc(sizeof(CSRRecord));
+            if (op->prev_R == NULL) {
                 return NULL;
             }
-            RG_Matrix_new(op->prev_gbR, GrB_UINT64, nrows,
-                          op->graph->nodes->itemCount);
 
-            // Mask Generation
-            GrB_Info info;
-            for (uint64_t i = 0; i < op->record_count; i++) {
+            // Create R (which will be used as a mask)
+            op->prev_R->I_size = op->record_count + 1;
+            op->prev_R->J_size = op->record_count * current_record_size;
+            op->prev_R->I =
+                (size_t *)malloc(sizeof(size_t) * op->prev_R->I_size);
+            if (op->prev_R->I == NULL) {
+                return NULL;
+            }
+            op->prev_R->J =
+                (size_t *)malloc(sizeof(size_t) * op->prev_R->J_size);
+            if (op->prev_R->J == NULL) {
+                return NULL;
+            }
+            op->prev_R->I[0] = 0;
+
+#pragma omp parallel for num_threads(num_threads)
+            for (size_t i = 1; i < op->prev_R->I_size; i++) {
+                op->prev_R->I[i] = i * current_record_size;
+            }
+
+#pragma omp parallel for num_threads(num_threads)
+            for (size_t i = 0; i < op->record_count; i++) {
                 Record r = op->records[i];
-                for (uint64_t j = 0; j < Record_length(r); j++) {
+                uint r_len = 0;
+                for (uint j = 0; j < Record_length(r); j++) {
                     if (Record_GetType(r, j) != REC_TYPE_NODE) continue;
                     Node *n = Record_GetNode(r, j);
                     NodeID id = ENTITY_GET_ID(n);
-                    info = GrB_Matrix_setElement_UINT64(
-                        (*(op->prev_gbR))->matrix, op->srcNodeIdx, i, id);
-                    assert(info == GrB_SUCCESS);
+                    op->prev_R->J[(i * current_record_size) + r_len++] = id;
                 }
+                assert(r_len == current_record_size);
+                cpp_sort(op->prev_R->J + op->prev_R->I[i],
+                         op->prev_R->J + op->prev_R->I[i + 1]);
             }
         }
 
         // Traverse
         _traverse(op);
 
-        size_t prv_gbR_nvals, prv_gbR_nrows;
-        RG_Matrix_nrows(&prv_gbR_nrows, *(op->prev_gbR));
-        RG_Matrix_nvals(&prv_gbR_nvals, *(op->prev_gbR));
-
-        op->num_prev_vertices = prv_gbR_nvals / prv_gbR_nrows;
+        assert(op->IC_list != NULL);
+        assert(op->JC_list != NULL);
+        assert(op->IC_size_list != NULL);
+        assert(op->JC_size_list != NULL);
     }
 
     // RESULT EMISSION PHASE
     // If your parent is not ConditionalTraverse,
     // Return as a list of records
     if (op->op.parent->type != OPType_CONDITIONAL_TRAVERSE) {
-        assert(op->prev_gbR != NULL);
+        assert(op->prev_R != NULL);
 
-        NodeID src_id = INVALID_ENTITY_ID;
-        NodeID dest_id = INVALID_ENTITY_ID;
+        while (true) {
+            // Loop m
+            // If M_list is not out of bound
+            if (op->M_list_cur < op->M_list_cap) {
+                // Loop i
+                // If M_list[m].IC is not out of bound
+                if (op->iter_i < op->IC_size_list[op->M_list_cur] - 1) {
+                    // Loop j
+                    // If M_list[m].IC[i].JC is not out of bound
+                    if (op->iter_j <
+                        op->IC_list[op->M_list_cur][op->iter_i + 1]) {
+                        // Source ID = cur_i + M_offset_i
+                        src_id = op->iter_i + op->IM[op->M_list_cur];
+                        // Destination ID = cur_j
+                        dest_id = op->JC_list[op->M_list_cur][op->iter_j];
 
-        // Grab one tuple from C
-        // Candidate
-        GrB_Info info =
-            RG_MatrixTupleIter_next_UINT64(&op->iter, &src_id, &dest_id, NULL);
-        if (info != GrB_SUCCESS) {
-            RG_Matrix_free(op->prev_gbR);
-            return NULL;
+                        // Advance j
+                        op->iter_j++;
+
+                        // printf("%lu (%lu + %lu) %lu\n", src_id, op->iter_i,
+                        // op->IM[op->M_list_cur], dest_id);
+                        // assert(src_id != INVALID_ENTITY_ID);
+                        // assert(dest_id != INVALID_ENTITY_ID);
+
+                        // Break the loop
+                        break;
+                    }
+                    // If M_list[m].IC[i].JC is out of bound
+                    else {
+                        // Advance i
+                        op->iter_i++;
+                        if (op->r != NULL) OpBase_DeleteRecord(op->r);
+                        op->r = NULL;
+                        // No need to set j = 0 (CSR)
+                        // op->iter_j = 0;
+                    }
+                }
+                // If M_list[m].IC is out of bound
+                else {
+                    // Free unused IC and JC
+                    free(op->IC_list[op->M_list_cur]);
+                    free(op->JC_list[op->M_list_cur]);
+                    // Advance m
+                    op->M_list_cur++;
+                    // Set i = j = 0
+                    op->iter_i = op->iter_j = 0;
+                    if (op->r != NULL) OpBase_DeleteRecord(op->r);
+                    op->r = NULL;
+                }
+            }
+            // If M_list is out of bound
+            else {
+                free(op->IC_list);
+                free(op->IC_size_list);
+                free(op->JC_list);
+                free(op->JC_size_list);
+
+                free(op->prev_R->I);
+                free(op->prev_R->J);
+                free(op->prev_R);
+
+                return NULL;
+            }
         }
 
         assert(src_id != INVALID_ENTITY_ID);
         assert(dest_id != INVALID_ENTITY_ID);
 
-        // Check whether we need to grab a new record
-        if (op->prev_ID != src_id) {
-            op->r = NULL;
-            op->prev_ID = src_id;
-        }
-
-        // If we cannot reuse the previous record
         if (op->r == NULL) {
-            size_t num_vertices = op->destNodeIdx;
-
-            NodeID srcR_id = INVALID_ENTITY_ID;
-            NodeID destR_id = INVALID_ENTITY_ID;
-            uint64_t valueR = 0;
-
-            NodeID node_map[100];
+            size_t num_vertices = op->prev_R->J_size / (op->prev_R->I_size - 1);
 
             op->r = OpBase_CreateRecord((OpBase *)op);
-            for (size_t i = 0; i < op->num_prev_vertices; i++) {
-                // Only destination is needed
-                // Grab a record from M
-                info = RG_MatrixTupleIter_next_UINT64(&op->iter_R, &srcR_id,
-                                                      &destR_id, &valueR);
-                if (info != GrB_SUCCESS) {
-                    break;
-                }
-
-                // If we don't have any candidates for this row
-                // Skip until we are in the same row
-                while (srcR_id < src_id) {
-                    info = RG_MatrixTupleIter_next_UINT64(&op->iter_R, &srcR_id,
-                                                          &destR_id, &valueR);
-                    if (info != GrB_SUCCESS) {
-                        break;
-                    }
-                }
-                // Make sure both M and C are at the same row
-                assert(srcR_id == src_id);
-                assert(destR_id != INVALID_ENTITY_ID);
-
-                node_map[valueR] = destR_id;
-
-                // Create a record
+            for (size_t i = 0; i < num_vertices; i++) {
                 Node node = GE_NEW_NODE();
-                Graph_GetNode(op->graph, destR_id, &node);
-                Record_AddNode(op->r, valueR, node);
+                Graph_GetNode(op->graph,
+                              op->prev_R->J[(src_id * num_vertices) + i],
+                              &node);
+                Record_AddNode(op->r, i, node);
             }
-
-            // dfs the plan
-            OpBase *cur = child;
-
-            while (cur->type == OPType_CONDITIONAL_TRAVERSE) {
-                OpCondTraverse *cur_traverse = (OpCondTraverse *)cur;
-                // printf("Map [%d,%d] (%d) - [%d,%d]\n", cur_traverse->srcNodeIdx,
-                //        cur_traverse->destNodeIdx,
-                //        cur_traverse->edge_ctx->direction,
-                //        node_map[cur_traverse->srcNodeIdx],
-                //        node_map[cur_traverse->destNodeIdx]);
-                EdgeTraverseCtx_CollectEdges(
-                    cur_traverse->edge_ctx, node_map[cur_traverse->srcNodeIdx],
-                    node_map[cur_traverse->destNodeIdx]);
-                // printf("setting\n");
-                EdgeTraverseCtx_SetEdge(cur_traverse->edge_ctx, op->r);
-                cur = cur->children[0];
-            }
-        }
-
-        // If we broke, return NULL
-        if (info != GrB_SUCCESS) {
-            RG_Matrix_free(op->prev_gbR);
-            return NULL;
         }
 
         // Populate the destination node and add it to the Record.
@@ -522,128 +441,117 @@ static Record CondTraverseConsume(OpBase *opBase) {
         Graph_GetNode(op->graph, dest_id, &node);
         Record_AddNode(op->r, op->destNodeIdx, node);
 
-        if (op->edge_ctx) {
-            Node *srcNode = Record_GetNode(op->r, op->srcNodeIdx);
-            // Collect all appropriate edges connecting the current pair of
-            // endpoints.
-            EdgeTraverseCtx_CollectEdges(op->edge_ctx, ENTITY_GET_ID(srcNode),
-                                         dest_id);
-            // We're guaranteed to have at least one edge.
-            EdgeTraverseCtx_SetEdge(op->edge_ctx, op->r);
-        }
-
-        // size_t record_str_cap = 0;
-        // char *record_str = NULL;
-        // size_t record_str_len =
-        //     Record_ToString(op->r, &record_str, &record_str_cap);
-        // printf("[Traverse] Record %s\n", record_str);
-
-        // Send the clone
         return OpBase_CloneRecord(op->r);
     }
 
     // If your parent is ConditionalTraverse,
     // Materializing them and pass them through CSR!
     else {
-        assert(op->prev_gbR != NULL);
+        // printf("Result Emission (Materialize + Bypass)\n");
+        assert(op->prev_R != NULL);
 
-        // Allocate materialized matrix as output_matrix
-        RG_Matrix *output_matrix = (RG_Matrix *)malloc(sizeof(RG_Matrix));
+        CSRRecord *output_matrix = (CSRRecord *)malloc(sizeof(CSRRecord));
         if (output_matrix == NULL) {
             return NULL;
         }
 
-        // New output_matrix dimension
-        GrB_Index C_nvals, C_ncols;
-        GrB_Matrix_nvals(&C_nvals, op->M->matrix);
-        GrB_Matrix_ncols(&C_ncols, op->M->matrix);
-        RG_Matrix_new(output_matrix, GrB_UINT64, C_nvals, C_ncols);
-
-        // Use output_nrow to determine current row
-        uint64_t output_nrow = 0;
-
-        // Control rows by using old_iter_R
-        RG_MatrixTupleIter old_iter_R = op->iter_R;
-
-        NodeID src_id = INVALID_ENTITY_ID;
-        NodeID dest_id = INVALID_ENTITY_ID;
-
-        while (true) {
-            // Grab one candidate
-            GrB_Info info = RG_MatrixTupleIter_next_UINT64(&op->iter, &src_id,
-                                                           &dest_id, NULL);
-            if (info != GrB_SUCCESS) {
-                break;
-            }
-
-            // If we are in the new row, change the iterator
-            if (op->prev_ID != src_id) {
-                old_iter_R = op->iter_R;
-                op->prev_ID = src_id;
-            }
-
-            // Make sure we are using old_iter_R
-            op->iter_R = old_iter_R;
-
-            NodeID srcR_id = INVALID_ENTITY_ID;
-            NodeID destR_id = INVALID_ENTITY_ID;
-            uint64_t valueR = 0;
-
-            op->r = OpBase_CreateRecord((OpBase *)op);
-
-            // Grab a row from M
-            size_t num_vertices = op->destNodeIdx;
-            for (size_t i = 0; i < op->num_prev_vertices; i++) {
-                info = RG_MatrixTupleIter_next_UINT64(&op->iter_R, &srcR_id,
-                                                      &destR_id, &valueR);
-                if (info != GrB_SUCCESS) {
-                    break;
-                }
-
-                // printf("%d %d\n", srcR_id, src_id);
-
-                // If this row does not contain any candidate,
-                // Skip to the earliest row that contains candidates
-                while (srcR_id < src_id) {
-                    info = RG_MatrixTupleIter_next_UINT64(&op->iter_R, &srcR_id,
-                                                          &destR_id, &valueR);
-                    if (info != GrB_SUCCESS) {
-                        break;
-                    }
-                }
-
-                assert(srcR_id == src_id);
-                assert(destR_id != INVALID_ENTITY_ID);
-
-                // Set the materialized matrix
-                GrB_Matrix_setElement_UINT64((*output_matrix)->matrix, valueR,
-                                             output_nrow, destR_id);
-                // printf("A[%d,%d] <- %d\n", output_nrow, destR_id, valueR);
-            }
-
-            // If we broke, break the loop
-            if (info != GrB_SUCCESS) {
-                break;
-            }
-
-            // Set the candidate into the materialized matrix
-            GrB_Matrix_setElement_UINT64((*output_matrix)->matrix,
-                                         op->destNodeIdx, output_nrow, dest_id);
-            // printf("A[%d,%d] <- %d\n", output_nrow, dest_id,
-            // op->destNodeIdx);
-
-            // Move to the next row in the materialized matrix
-            output_nrow++;
+        // Compute in_offset
+        size_t *in_offset =
+            (size_t *)malloc(sizeof(size_t) * (num_threads + 1));
+        if (in_offset == NULL) {
+            return NULL;
+        }
+        in_offset[0] = 0;
+        for (size_t i = 0; i < num_threads; i++) {
+            // in_offset[i] + nrows(C[i])
+            size_t nrows_C_i = op->IC_size_list[i] - 1;
+            in_offset[i + 1] = in_offset[i] + nrows_C_i;
         }
 
-        RG_Matrix_wait((*output_matrix), true);
-        RG_Matrix_free(op->prev_gbR);
+        // Compute out_offset
+        size_t *out_offset =
+            (size_t *)malloc(sizeof(size_t) * (num_threads + 1));
+        if (out_offset == NULL) {
+            return NULL;
+        }
+        out_offset[0] = 0;
+        for (size_t i = 0; i < num_threads; i++) {
+            // in_offset[i] + nvals(C[i])
+            size_t nvals_C_i = op->JC_size_list[i];
+            out_offset[i + 1] = out_offset[i] + nvals_C_i;
+        }
 
-        GxB_Matrix_fprint((*output_matrix)->matrix, "output_matrix", GxB_SHORT,
-                          stdout);
+        size_t num_vertices = op->prev_R->J_size / (op->prev_R->I_size - 1);
 
-        // Return the materialized matrix as a mask for the next iteration
-        return (Record)(output_matrix);
+        // Initialize output_matrix
+        output_matrix->I_size = out_offset[num_threads] + 1;
+        output_matrix->J_size = out_offset[num_threads] * (num_vertices + 1);
+        output_matrix->I =
+            (size_t *)malloc(sizeof(size_t) * output_matrix->I_size);
+        if (output_matrix->I == NULL) {
+            return NULL;
+        }
+#pragma omp parallel for num_threads(num_threads)
+        for (size_t i = 0; i < out_offset[num_threads] + 1; i++) {
+            output_matrix->I[i] = i * (num_vertices + 1);
+        }
+
+        output_matrix->J =
+            (size_t *)malloc(sizeof(size_t) * output_matrix->J_size);
+        if (output_matrix->J == NULL) {
+            return NULL;
+        }
+
+        // Do multiple times
+#pragma omp parallel for num_threads(num_threads)
+        for (size_t m = 0; m < op->M_list_cap; m++) {
+            // Input: C and R (from in_offset[i] to in_offset[i+1])
+            // Output: P (from out_offset[i] to out_offset[i+1])
+            size_t *IC = op->IC_list[m];
+            size_t IC_size = op->IC_size_list[m];
+            size_t *JC = op->JC_list[m];
+            size_t JC_size = op->JC_size_list[m];
+            size_t *IR = op->prev_R->I + in_offset[m];
+            size_t IR_size = in_offset[m + 1] - in_offset[m];
+            size_t *JR = op->prev_R->J + (in_offset[m] * num_vertices);
+            size_t JR_size = IR_size * num_vertices;
+            assert((IC_size - 1) == IR_size);
+
+            size_t *JP =
+                output_matrix->J + (out_offset[m] * (num_vertices + 1));
+            // Loop each row in R
+            for (size_t i = 0; i < IR_size; i++) {
+                size_t *JR_st = JR + (i * num_vertices);
+                size_t *JR_en = JR + ((i + 1) * num_vertices);
+
+                // Union the current row in R with all C
+                // Loop each element in row C
+                size_t *JC_pt = JC + IC[i];
+                size_t *JC_en = JC + IC[i + 1];
+                for (; JC_pt != JC_en; JC_pt++) {
+                    // Loop each element in JR
+                    // Assume JC_st to JC_en is in the sorted order
+                    bool is_inserted = false;
+                    for (size_t *JR_pt = JR_st; JR_pt != JR_en; JR_pt++) {
+                        *JP = *JR_pt;
+                        JP++;
+                    }
+                    *JP = *JC_pt;
+                    JP++;
+                }
+            }
+        }
+
+        free(op->IC_list);
+        free(op->IC_size_list);
+        free(op->JC_list);
+        free(op->JC_size_list);
+
+        free(op->prev_R->I);
+        free(op->prev_R->J);
+        free(op->prev_R);
+
+        return (Record)output_matrix;
     }
 
     return NULL;
@@ -682,6 +590,11 @@ static void CondTraverseFree(OpBase *ctx) {
 
     GrB_Info info = RG_MatrixTupleIter_detach(&op->iter);
     ASSERT(info == GrB_SUCCESS);
+
+    if (op->F != NULL) {
+        RG_Matrix_free(&op->F);
+        op->F = NULL;
+    }
 
     if (op->M != NULL) {
         RG_Matrix_free(&op->M);

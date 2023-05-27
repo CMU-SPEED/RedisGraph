@@ -438,7 +438,7 @@ static Record CondTraverseConsume(OpBase *opBase) {
         GrB_Info info =
             RG_MatrixTupleIter_next_UINT64(&op->iter, &src_id, &dest_id, NULL);
         if (info != GrB_SUCCESS) {
-            RG_Matrix_free(op->prev_gbR);
+            // RG_Matrix_free(op->prev_gbR);
             return NULL;
         }
 
@@ -513,7 +513,7 @@ static Record CondTraverseConsume(OpBase *opBase) {
 
         // If we broke, return NULL
         if (info != GrB_SUCCESS) {
-            RG_Matrix_free(op->prev_gbR);
+            // RG_Matrix_free(op->prev_gbR);
             return NULL;
         }
 
@@ -637,7 +637,7 @@ static Record CondTraverseConsume(OpBase *opBase) {
         }
 
         RG_Matrix_wait((*output_matrix), true);
-        RG_Matrix_free(op->prev_gbR);
+        // RG_Matrix_free(op->prev_gbR);
 
         GxB_Matrix_fprint((*output_matrix)->matrix, "output_matrix", GxB_SHORT,
                           stdout);
@@ -682,6 +682,10 @@ static void CondTraverseFree(OpBase *ctx) {
 
     GrB_Info info = RG_MatrixTupleIter_detach(&op->iter);
     ASSERT(info == GrB_SUCCESS);
+
+    if (op->prev_gbR != NULL) {
+        RG_Matrix_free(op->prev_gbR);
+    }
 
     if (op->M != NULL) {
         RG_Matrix_free(&op->M);

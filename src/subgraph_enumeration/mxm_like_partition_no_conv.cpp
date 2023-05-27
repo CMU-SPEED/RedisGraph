@@ -12,7 +12,7 @@ extern "C" {
 #include "../util/simple_timer.h"
 }
 
-extern "C" void mxv_like_v1(std::vector<size_t> &Ic, size_t *Im, size_t Im_size,
+extern "C" void mxv_like_v2(std::vector<size_t> &Ic, size_t *Im, size_t Im_size,
                             size_t *IA, size_t IA_size, size_t *JA,
                             size_t JA_size, size_t *Ib, size_t Ib_size);
 
@@ -85,7 +85,7 @@ extern "C" void mxm_like_partition_no_conv(
             std::vector<size_t> M_sorted(M_st, M_st + M_size);
             std::sort(std::begin(M_sorted), std::end(M_sorted));
 
-            mxv_like_v1(tmp_C, M_sorted.data(), M_sorted.size(), IA_arr, IA_size, JA_arr, JA_size,
+            mxv_like_v2(tmp_C, M_sorted.data(), M_sorted.size(), IA_arr, IA_size, JA_arr, JA_size,
                         B_st, B_size);
 
             // FIXME: We should not copy (unnecessary operations)

@@ -4,7 +4,7 @@
 
 /**
  * Common Neighbor Traversal Experiment
- * 1. count & filter
+ * 2a. intersection chain using mask
 */
 
 #include "query_plan.h"
@@ -74,16 +74,30 @@ void _traverse(OpCondTraverse *op) {
     double result = 0.0;
     double tic[2];
 
-    GrB_Matrix S, A;
+    uint64_t nV = 0;
+    for (uint64_t j = 0; j < 4; j++) {
+        if (QPLAN[QPLAN_ID][op->destNodeIdx][j]) {
+            nV++;
+        }
+    }
+
+    GrB_Matrix S[nV], A;
+    GrB_Index M_nrows, M_ncols;
+
     printf("Mask and Selector Generation: ");
     simple_tic(tic);
     {
-        GrB_Index M_nrows, M_ncols;
         GrB_Matrix_nrows(&M_nrows, (*(op->prev_gbR))->matrix);
         GrB_Matrix_ncols(&M_ncols, (*(op->prev_gbR))->matrix);
-        GrB_Matrix_new(&S, GrB_BOOL, M_nrows, M_ncols);
+        // GrB_Matrix_new(&S, GrB_BOOL, M_nrows, M_ncols);
         A = op->graph->adjacency_matrix->matrix;
         GrB_Matrix_resize(A, M_ncols, M_ncols);
+        GrB_Matrix_resize(op->M->matrix, M_nrows, M_ncols);
+        GrB_Matrix_wait(A, GrB_MATERIALIZE);
+
+        for (size_t j = 0; j < nV; j++) {
+            GrB_Matrix_new(&(S[j]), GrB_BOOL, M_nrows, M_ncols);
+        }
 
         RG_MatrixTupleIter_attach(&op->iter, *(op->prev_gbR));
 
@@ -102,7 +116,7 @@ void _traverse(OpCondTraverse *op) {
 
             // Check the plan to generate S
             if (QPLAN[QPLAN_ID][op->destNodeIdx][value - 1]) {
-                info = GrB_Matrix_setElement_BOOL(S, true, src_id, dest_id);
+                info = GrB_Matrix_setElement_BOOL(S[value - 1], true, src_id, dest_id);
                 assert(info == GrB_SUCCESS);
             }
         }
@@ -110,23 +124,24 @@ void _traverse(OpCondTraverse *op) {
     result = simple_toc(tic);
     printf("%f ms\n", result * 1e3);
 
-    // printf("Enumeration: ");
+    for (size_t i = 0; i < nV; i++) {
+        GrB_Matrix_wait(S[i], GrB_MATERIALIZE);
+    }
+
+    printf("Enumeration: ");
     simple_tic(tic);
     {
-        uint64_t nV = 0;
-        for (uint64_t j = 0; j < 4; j++) {
-            if (QPLAN[QPLAN_ID][op->destNodeIdx][j]) {
-                nV++;
-            }
+        GrB_mxm(op->M->matrix, GrB_NULL, GrB_NULL, GrB_LAND_LOR_SEMIRING_BOOL, S[0], A, GrB_DESC_R);
+        // GrB_Matrix_wait(op->M->matrix, GrB_MATERIALIZE);
+        GrB_Matrix_free(&(S[0]));
+        for (size_t i = 1; i < nV; i++) {
+            GrB_mxm(op->M->matrix, op->M->matrix, GrB_NULL, GrB_LAND_LOR_SEMIRING_BOOL, S[i], A, GrB_DESC_R);
+            // GrB_Matrix_wait(op->M->matrix, GrB_MATERIALIZE);
+            GrB_Matrix_free(&(S[i]));
         }
-
-        _gb_matrix_filter_v2(&(op->M->matrix), &((*(op->prev_gbR))->matrix), &S,
-                          &(op->graph->adjacency_matrix->matrix), nV);
     }
     result = simple_toc(tic);
-    printf("Enumeration: %f ms\n", result * 1e3);
-
-    GrB_Matrix_free(&S);
+    printf("%f ms\n", result * 1e3);
 
     RG_MatrixTupleIter_attach(&op->iter, op->M);
     RG_MatrixTupleIter_attach(&op->iter_R, *(op->prev_gbR));

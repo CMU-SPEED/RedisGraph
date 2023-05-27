@@ -58,8 +58,12 @@ static Record ApplyConsume(OpBase *opBase) {
 			}
 		}
 
+		printf("A\n");
+
 		// Pull a Record from the RHS branch.
 		Record rhs_record = OpBase_Consume(op->rhs_branch);
+
+		printf("B\n");
 
 		if(rhs_record == NULL) {
 			/* RHS branch depleted for the current bound Record;
@@ -71,9 +75,14 @@ static Record ApplyConsume(OpBase *opBase) {
 			continue;
 		}
 
+		printf("C\n");
+
 		// Clone the bound Record and merge the RHS Record into it.
 		Record r = OpBase_CloneRecord(op->r);
 		Record_Merge(r, rhs_record);
+
+		printf("E\n");
+
 		// Delete the RHS record, as it has been merged into r.
 		OpBase_DeleteRecord(rhs_record);
 
