@@ -817,18 +817,21 @@ GrB_Info GB_AxB_meta                // C<M>=A*B meta algorithm
         switch (axb_method)
         {
             case GB_USE_COLSCALE : 
+                printf("colscale\n");
                 // C = A*D, column scale
                 GBURBLE ("C%s=A*B, colscale ", M_str) ;
                 GB_OK (GB_AxB_colscale (C, A, B, semiring, flipxy, Context)) ;
                 break ;
 
             case GB_USE_ROWSCALE : 
+                printf("rowscale\n");
                 // C = D*B, row scale
                 GBURBLE ("C%s=A*B, rowscale ", M_str) ;
                 GB_OK (GB_AxB_rowscale (C, A, B, semiring, flipxy, Context)) ;
                 break ;
 
-            case GB_USE_DOT : 
+            case GB_USE_DOT :
+                printf("dot\n"); 
                 // C<M>=A*B via dot product, or C_in<M>+=A*B if in-place.
                 GBURBLE ("C%s=A*B', dot_product (transposed %s) ",
                     M_str, A_str) ;
@@ -841,6 +844,7 @@ GrB_Info GB_AxB_meta                // C<M>=A*B meta algorithm
                 break ;
 
             default : 
+                printf("saxpy\n");
                 // C = A*B via saxpy: Gustavson + Hash method
                 GBURBLE ("C%s=A*B, saxpy ", M_str) ;
                 GB_OK (GB_AxB_saxpy (C, can_do_in_place ? C_in : NULL, M,

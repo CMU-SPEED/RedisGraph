@@ -77,72 +77,71 @@ void _traverse(OpCondTraverse *op) {
     size_t **IC_list = NULL, *IC_size_list = NULL;
     size_t **JC_list = NULL, *JC_size_list = NULL;
     size_t *IB_arr = NULL, *JB_arr = NULL, IB_size = 0, JB_size = 0;
-    printf("Preparation: ");
+
     simple_tic(tic);
-    {
-        IC_list = (size_t **)malloc(sizeof(size_t *) * num_threads);
-        if (IC_list == NULL) {
-            return;
-        }
-        IC_size_list = (size_t *)malloc(sizeof(size_t) * num_threads);
-        if (IC_size_list == NULL) {
-            return;
-        }
-        JC_list = (size_t **)malloc(sizeof(size_t *) * num_threads);
-        if (JC_list == NULL) {
-            return;
-        }
-        JC_size_list = (size_t *)malloc(sizeof(size_t) * num_threads);
-        if (JC_size_list == NULL) {
-            return;
-        }
+    
+    IC_list = (size_t **)malloc(sizeof(size_t *) * num_threads);
+    if (IC_list == NULL) {
+        return;
+    }
+    IC_size_list = (size_t *)malloc(sizeof(size_t) * num_threads);
+    if (IC_size_list == NULL) {
+        return;
+    }
+    JC_list = (size_t **)malloc(sizeof(size_t *) * num_threads);
+    if (JC_list == NULL) {
+        return;
+    }
+    JC_size_list = (size_t *)malloc(sizeof(size_t) * num_threads);
+    if (JC_size_list == NULL) {
+        return;
+    }
 
-        size_t num_vertices = op->prev_R->J_size / (op->prev_R->I_size - 1);
-        size_t plan_nnz = 0;
-        for (size_t i = 0; i < num_vertices; i++) {
-            // For clique
-            if (QPLAN[QPLAN_ID][op->destNodeIdx][i]) plan_nnz++;
-        }
+    size_t num_vertices = op->prev_R->J_size / (op->prev_R->I_size - 1);
+    size_t plan_nnz = 0;
+    for (size_t i = 0; i < num_vertices; i++) {
+        // For clique
+        if (QPLAN[QPLAN_ID][op->destNodeIdx][i]) plan_nnz++;
+    }
 
-        // Build B from records and plan
-        IB_size = op->prev_R->I_size;
-        JB_size = (op->prev_R->I_size - 1) * plan_nnz;
-        IB_arr = (size_t *)malloc(sizeof(size_t) * IB_size);
-        if (IB_arr == NULL) {
-            return;
-        }
-        JB_arr = (size_t *)malloc(sizeof(size_t) * JB_size);
-        if (JB_arr == NULL) {
-            return;
-        }
+    // Build B from records and plan
+    IB_size = op->prev_R->I_size;
+    JB_size = (op->prev_R->I_size - 1) * plan_nnz;
+    IB_arr = (size_t *)malloc(sizeof(size_t) * IB_size);
+    if (IB_arr == NULL) {
+        return;
+    }
+    JB_arr = (size_t *)malloc(sizeof(size_t) * JB_size);
+    if (JB_arr == NULL) {
+        return;
+    }
 
 #pragma omp parallel for num_threads(num_threads)
-        for (size_t i = 0; i < op->prev_R->I_size - 1; i++) {
-            IB_arr[i] = i * plan_nnz;
-            size_t j_idx = 0;
-            for (size_t j = 0; j < num_vertices; j++) {
-                if (QPLAN[QPLAN_ID][op->destNodeIdx][j]) {
-                    JB_arr[i * plan_nnz + j_idx] =
-                        op->prev_R->J[i * num_vertices + j];
-                    j_idx++;
-                }
+    for (size_t i = 0; i < op->prev_R->I_size - 1; i++) {
+        IB_arr[i] = i * plan_nnz;
+        size_t j_idx = 0;
+        for (size_t j = 0; j < num_vertices; j++) {
+            if (QPLAN[QPLAN_ID][op->destNodeIdx][j]) {
+                JB_arr[i * plan_nnz + j_idx] =
+                    op->prev_R->J[i * num_vertices + j];
+                j_idx++;
             }
         }
-        IB_arr[op->prev_R->I_size - 1] = (op->prev_R->I_size - 1) * plan_nnz;
     }
-    result = simple_toc(tic);
-    printf("%f ms\n", result * 1e3);
+    IB_arr[op->prev_R->I_size - 1] = (op->prev_R->I_size - 1) * plan_nnz;
 
-    printf("Enumeration: ");
+    result = simple_toc(tic);
+    printf("Preparation: %f ms\n", result * 1e3);
+
     simple_tic(tic);
     {
         mxm_like_partition_no_conv(
             &IC_list, &IC_size_list, &JC_list, &JC_size_list, op->prev_R->I,
             op->prev_R->I_size, op->prev_R->J, op->prev_R->J_size, IB_arr,
-            IB_size, JB_arr, JB_size, &(op->graph->adjacency_matrix->matrix));
+            IB_size, JB_arr, JB_size, &(op->graph->adjacency_matrix->matrix), false);
     }
     result = simple_toc(tic);
-    printf("%f ms\n", result * 1e3);
+    printf("Enumeration: %f ms\n", result * 1e3);
 
     free(IB_arr);
     free(JB_arr);

@@ -5,7 +5,7 @@
 /**
  * Common Neighbor Traversal Experiment
  * 2b. intersection chain using eWiseMult
-*/
+ */
 
 #include "query_plan.h"
 
@@ -93,7 +93,6 @@ void _traverse(OpCondTraverse *op) {
         A = op->graph->adjacency_matrix->matrix;
         GrB_Matrix_resize(A, M_ncols, M_ncols);
         GrB_Matrix_resize(op->M->matrix, M_nrows, M_ncols);
-        GrB_Matrix_wait(A, GrB_MATERIALIZE);
 
         for (size_t j = 0; j < nV; j++) {
             GrB_Matrix_new(&(S[j]), GrB_BOOL, M_nrows, M_ncols);
@@ -116,7 +115,8 @@ void _traverse(OpCondTraverse *op) {
 
             // Check the plan to generate S
             if (QPLAN[QPLAN_ID][op->destNodeIdx][value - 1]) {
-                info = GrB_Matrix_setElement_BOOL(S[value - 1], true, src_id, dest_id);
+                info = GrB_Matrix_setElement_BOOL(S[value - 1], true, src_id,
+                                                  dest_id);
                 assert(info == GrB_SUCCESS);
             }
         }
@@ -124,20 +124,21 @@ void _traverse(OpCondTraverse *op) {
     result = simple_toc(tic);
     printf("%f ms\n", result * 1e3);
 
-    for (size_t i = 0; i < nV; i++) {
-        GrB_Matrix_wait(S[i], GrB_MATERIALIZE);
-    }
-
     printf("Enumeration: ");
     simple_tic(tic);
     {
-        GrB_mxm(op->M->matrix, GrB_NULL, GrB_NULL, GrB_LAND_LOR_SEMIRING_BOOL, S[0], A, GrB_DESC_R);
-        // GrB_Matrix_wait(op->M->matrix, GrB_MATERIALIZE);
+        // TODO: Two design decisions
+        //  1) Only mask the first one ✅
+        //  2) Mask every mxm
+        GrB_mxm(op->M->matrix, (*(op->prev_gbR))->matrix, GrB_NULL,
+                GrB_LAND_LOR_SEMIRING_BOOL, S[0], A, GrB_DESC_RC);
         GrB_Matrix_free(&(S[0]));
         for (size_t i = 1; i < nV; i++) {
-            GrB_mxm(S[i], GrB_NULL, GrB_NULL, GrB_LAND_LOR_SEMIRING_BOOL, S[i], A, GrB_DESC_R);
-            GrB_Matrix_eWiseMult_BinaryOp(op->M->matrix, GrB_NULL, GrB_NULL, GrB_LAND, S[i], op->M->matrix, GrB_DESC_R);
-            // GrB_Matrix_wait(op->M->matrix, GrB_MATERIALIZE);
+            GrB_mxm(S[i], GrB_NULL, GrB_NULL, GrB_LAND_LOR_SEMIRING_BOOL, S[i],
+                    A, GrB_DESC_R);
+            GrB_Matrix_eWiseMult_BinaryOp(op->M->matrix, GrB_NULL, GrB_NULL,
+                                          GrB_LAND, S[i], op->M->matrix,
+                                          GrB_DESC_R);
             GrB_Matrix_free(&(S[i]));
         }
     }
@@ -357,7 +358,7 @@ static Record CondTraverseConsume(OpBase *opBase) {
                         break;
                     }
                 }
-                // Make sure both M and C are at the same row 
+                // Make sure both M and C are at the same row
                 assert(srcR_id == src_id);
                 assert(destR_id != INVALID_ENTITY_ID);
 
@@ -467,7 +468,7 @@ static Record CondTraverseConsume(OpBase *opBase) {
             GrB_Matrix_setElement_UINT64((*output_matrix)->matrix,
                                          num_vertices + 1, output_nrow,
                                          dest_id);
-            
+
             // Move to the next row in the materialized matrix
             output_nrow++;
         }

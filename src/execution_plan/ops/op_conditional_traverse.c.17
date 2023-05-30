@@ -4,7 +4,7 @@
 
 /**
  * Common Neighbor Traversal Experiment
- * 1. intersection (binary reduction)
+ * 2a. intersection chain using mask
  */
 
 #include "query_plan.h"
@@ -81,22 +81,18 @@ void _traverse(OpCondTraverse *op) {
         }
     }
 
-    GrB_Matrix S[nV], A;
+    GrB_Matrix S, A;
     GrB_Index M_nrows, M_ncols;
 
-    printf("Mask and Selector Generation: ");
     simple_tic(tic);
     {
         GrB_Matrix_nrows(&M_nrows, (*(op->prev_gbR))->matrix);
         GrB_Matrix_ncols(&M_ncols, (*(op->prev_gbR))->matrix);
-        // GrB_Matrix_new(&S, GrB_BOOL, M_nrows, M_ncols);
         A = op->graph->adjacency_matrix->matrix;
         GrB_Matrix_resize(A, M_ncols, M_ncols);
         GrB_Matrix_resize(op->M->matrix, M_nrows, M_ncols);
 
-        for (size_t j = 0; j < nV; j++) {
-            GrB_Matrix_new(&(S[j]), GrB_BOOL, M_nrows, M_ncols);
-        }
+        GrB_Matrix_new(&S, GrB_BOOL, M_nrows, M_ncols);
 
         RG_MatrixTupleIter_attach(&op->iter, *(op->prev_gbR));
 
@@ -115,60 +111,24 @@ void _traverse(OpCondTraverse *op) {
 
             // Check the plan to generate S
             if (QPLAN[QPLAN_ID][op->destNodeIdx][value - 1]) {
-                info = GrB_Matrix_setElement_BOOL(S[value - 1], true, src_id,
-                                                  dest_id);
+                info = GrB_Matrix_setElement_BOOL(S, true, src_id, dest_id);
                 assert(info == GrB_SUCCESS);
             }
         }
     }
     result = simple_toc(tic);
-    printf("%f ms\n", result * 1e3);
+    printf("Mask and Selector Generation: %f ms\n", result * 1e3);
 
-    printf("Enumeration: ");
     simple_tic(tic);
     {
-        if (nV == 1) {
-            GrB_mxm(op->M->matrix, (*(op->prev_gbR))->matrix, GrB_NULL,
-                    GrB_LAND_LOR_SEMIRING_BOOL, S[0], A, GrB_DESC_RC);
-        }
-
-        else {
-            // TODO: Two design decisions
-            //  1) Only mask the first one
-            //  2) Mask every mxm ✅
-            for (size_t i = 0; i < nV; i++) {
-                GrB_mxm(S[i], (*(op->prev_gbR))->matrix, GrB_NULL, GrB_LAND_LOR_SEMIRING_BOOL,
-                        S[i], A, GrB_DESC_RC);
-            }
-
-            uint64_t mult, limits;
-            for (mult = 1, limits = nV / 2; mult < limits; mult *= 2) {
-                for (uint64_t i = 0; i < nV; i += (mult * 2)) {
-                    GrB_Matrix_eWiseMult_BinaryOp(S[i], GrB_NULL, GrB_NULL,
-                                                  GrB_LAND, S[i], S[i + mult],
-                                                  GrB_DESC_R);
-                }
-            }
-
-            if (mult == limits) {
-                GrB_Matrix_eWiseMult_BinaryOp(op->M->matrix, GrB_NULL, GrB_NULL,
-                                              GrB_LAND, S[0], S[mult],
-                                              GrB_DESC_R);
-            }
-
-            if (nV % 2 != 0) {
-                GrB_Matrix_eWiseMult_BinaryOp(op->M->matrix, GrB_NULL, GrB_NULL,
-                                              GrB_LAND, op->M->matrix,
-                                              S[nV - 1], GrB_DESC_R);
-            }
-        }
-
-        for (size_t i = 0; i < nV; i++) {
-            GrB_Matrix_free(&(S[i]));
-        }
+        _gb_mxm_like_partition_merge(&(op->M->matrix),
+                                     &((*(op->prev_gbR))->matrix), &S, &A);
+        // GrB_Matrix_free(&S);
     }
     result = simple_toc(tic);
-    printf("%f ms\n", result * 1e3);
+    printf("Enumeration: %f ms\n", result * 1e3);
+
+    GrB_Matrix_free(&S);
 
     RG_MatrixTupleIter_attach(&op->iter, op->M);
     RG_MatrixTupleIter_attach(&op->iter_R, *(op->prev_gbR));

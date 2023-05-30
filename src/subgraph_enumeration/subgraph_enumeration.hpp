@@ -29,7 +29,7 @@ void mxm_like_partition_no_conv(size_t ***IC, size_t **IC_size, size_t ***JC,
                                 size_t **JC_size, size_t *IM, size_t IM_size,
                                 size_t *JM, size_t JM_size, size_t *IB,
                                 size_t IB_size, size_t *JB, size_t JB_size,
-                                GrB_Matrix *A);
+                                GrB_Matrix *A, bool is_B_identity);
 
 void cpp_sort(size_t *a_st, size_t *a_en);
 

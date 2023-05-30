@@ -32,7 +32,7 @@ GrB_Info GB_AxB_saxpy               // C = A*B using Gustavson/Hash/Bitmap
     GB_Context Context
 )
 {
-// double tt1 = omp_get_wtime ( ) ;
+double tt1 = omp_get_wtime ( ) ;
 
     //--------------------------------------------------------------------------
     // check inputs
@@ -220,6 +220,7 @@ GrB_Info GB_AxB_saxpy               // C = A*B using Gustavson/Hash/Bitmap
         #endif
 
         ASSERT (C_sparsity == GxB_HYPERSPARSE || C_sparsity == GxB_SPARSE) ;
+        printf("  |- GB_AxB_saxpy3\n");
         info = GB_AxB_saxpy3 (C, C_iso, cscalar, C_sparsity, M, Mask_comp,
             Mask_struct, A, B, semiring, flipxy, mask_applied, AxB_method,
             do_sort, Context) ;
@@ -275,7 +276,7 @@ GrB_Info GB_AxB_saxpy               // C = A*B using Gustavson/Hash/Bitmap
         (*mask_applied) = (M != NULL && info == GrB_SUCCESS) ;
     }
 
-// tt1 = omp_get_wtime ( ) - tt1 ; printf ("saxpy time: %g\n", tt1) ;
+tt1 = omp_get_wtime ( ) - tt1 ; printf ("saxpy time: %g ms (mask=%d)\n", tt1 * 1000, (*mask_applied)) ;
     return (info) ;
 }
 

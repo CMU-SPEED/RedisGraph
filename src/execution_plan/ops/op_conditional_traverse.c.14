@@ -5,7 +5,7 @@
 /**
  * Common Neighbor Traversal Experiment
  * 2a. intersection chain using mask
-*/
+ */
 
 #include "query_plan.h"
 
@@ -84,16 +84,13 @@ void _traverse(OpCondTraverse *op) {
     GrB_Matrix S[nV], A;
     GrB_Index M_nrows, M_ncols;
 
-    printf("Mask and Selector Generation: ");
     simple_tic(tic);
     {
         GrB_Matrix_nrows(&M_nrows, (*(op->prev_gbR))->matrix);
         GrB_Matrix_ncols(&M_ncols, (*(op->prev_gbR))->matrix);
-        // GrB_Matrix_new(&S, GrB_BOOL, M_nrows, M_ncols);
         A = op->graph->adjacency_matrix->matrix;
         GrB_Matrix_resize(A, M_ncols, M_ncols);
         GrB_Matrix_resize(op->M->matrix, M_nrows, M_ncols);
-        GrB_Matrix_wait(A, GrB_MATERIALIZE);
 
         for (size_t j = 0; j < nV; j++) {
             GrB_Matrix_new(&(S[j]), GrB_BOOL, M_nrows, M_ncols);
@@ -116,32 +113,32 @@ void _traverse(OpCondTraverse *op) {
 
             // Check the plan to generate S
             if (QPLAN[QPLAN_ID][op->destNodeIdx][value - 1]) {
-                info = GrB_Matrix_setElement_BOOL(S[value - 1], true, src_id, dest_id);
+                info = GrB_Matrix_setElement_BOOL(S[value - 1], true, src_id,
+                                                  dest_id);
                 assert(info == GrB_SUCCESS);
             }
         }
     }
     result = simple_toc(tic);
-    printf("%f ms\n", result * 1e3);
+    printf("Mask and Selector Generation: %f ms\n", result * 1e3);
 
-    for (size_t i = 0; i < nV; i++) {
-        GrB_Matrix_wait(S[i], GrB_MATERIALIZE);
-    }
-
-    printf("Enumeration: ");
     simple_tic(tic);
     {
-        GrB_mxm(op->M->matrix, GrB_NULL, GrB_NULL, GrB_LAND_LOR_SEMIRING_BOOL, S[0], A, GrB_DESC_R);
-        // GrB_Matrix_wait(op->M->matrix, GrB_MATERIALIZE);
-        GrB_Matrix_free(&(S[0]));
+        GrB_mxm(op->M->matrix, (*(op->prev_gbR))->matrix, GrB_NULL,
+                GrB_LAND_LOR_SEMIRING_BOOL, S[0], A, GrB_DESC_RC);
+        // GrB_Matrix_free(&(S[0]));
         for (size_t i = 1; i < nV; i++) {
-            GrB_mxm(op->M->matrix, op->M->matrix, GrB_NULL, GrB_LAND_LOR_SEMIRING_BOOL, S[i], A, GrB_DESC_R);
-            // GrB_Matrix_wait(op->M->matrix, GrB_MATERIALIZE);
-            GrB_Matrix_free(&(S[i]));
+            GrB_mxm(op->M->matrix, op->M->matrix, GrB_NULL,
+                    GrB_LAND_LOR_SEMIRING_BOOL, S[i], A, GrB_DESC_R);
+            // GrB_Matrix_free(&(S[i]));
         }
     }
     result = simple_toc(tic);
-    printf("%f ms\n", result * 1e3);
+    printf("Enumeration: %f ms\n", result * 1e3);
+
+    for (size_t i = 0; i < nV; i++) {
+        GrB_Matrix_free(&(S[i]));
+    }
 
     RG_MatrixTupleIter_attach(&op->iter, op->M);
     RG_MatrixTupleIter_attach(&op->iter_R, *(op->prev_gbR));
@@ -356,7 +353,7 @@ static Record CondTraverseConsume(OpBase *opBase) {
                         break;
                     }
                 }
-                // Make sure both M and C are at the same row 
+                // Make sure both M and C are at the same row
                 assert(srcR_id == src_id);
                 assert(destR_id != INVALID_ENTITY_ID);
 
@@ -466,7 +463,7 @@ static Record CondTraverseConsume(OpBase *opBase) {
             GrB_Matrix_setElement_UINT64((*output_matrix)->matrix,
                                          num_vertices + 1, output_nrow,
                                          dest_id);
-            
+
             // Move to the next row in the materialized matrix
             output_nrow++;
         }
