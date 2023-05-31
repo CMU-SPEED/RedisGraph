@@ -623,6 +623,7 @@ GrB_Info GB_AxB_saxpy3              // C = A*B using Gustavson+Hash
 
     if (C_iso)
     {
+        printf("saxpy3 - A\n");
 
         //----------------------------------------------------------------------
         // C is iso; compute the pattern of C<#>=A*B with the any_pair semiring
@@ -640,6 +641,8 @@ GrB_Info GB_AxB_saxpy3              // C = A*B using Gustavson+Hash
     }
     else
     {
+
+        printf("saxpy3 - B\n");
 
         //----------------------------------------------------------------------
         // C is non-iso
@@ -684,6 +687,8 @@ GrB_Info GB_AxB_saxpy3              // C = A*B using Gustavson+Hash
 
         if (!done)
         { 
+            printf("saxpy3 - C\n");
+
             info = GB_AxB_saxpy_generic (C, M, Mask_comp, Mask_struct,
                 M_in_place, A, A_is_pattern, B, B_is_pattern, semiring,
                 flipxy, GB_SAXPY_METHOD_3,

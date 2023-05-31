@@ -1,0 +1,64 @@
+<entry>
+Mask and Selector Generation: 4358.125390 ms
+    |- (MxM-Like) Partition - 0.006951 ms
+    |- (MxM-Like) MxM - 1584.474309 ms
+    |- (MxM-Like) Merge - 411.523521 ms
+  |- (My CN) MxM: 1996.128134 ms
+Enumeration: 7311.745785 ms
+Mask and Selector Generation: 6711.543626 ms
+    |- (MxM-Like) Partition - 0.010010 ms
+    |- (MxM-Like) MxM - 3936.851428 ms
+    |- (MxM-Like) Merge - 1367.202101 ms
+  |- (My CN) MxM: 5304.149694 ms
+    |- (MxM-Like) Partition - 0.005396 ms
+    |- (MxM-Like) MxM - 5277.702866 ms
+    |- (MxM-Like) Merge - 171.094962 ms
+  |- (My CN) MxM: 5448.898899 ms
+Enumeration: 25151.642414 ms
+Mask and Selector Generation: 3527.526789 ms
+    |- (MxM-Like) Partition - 0.013590 ms
+    |- (MxM-Like) MxM - 2749.545845 ms
+    |- (MxM-Like) Merge - 819.223788 ms
+  |- (My CN) MxM: 3568.855841 ms
+    |- (MxM-Like) Partition - 0.006735 ms
+    |- (MxM-Like) MxM - 2128.522502 ms
+    |- (MxM-Like) Merge - 122.945584 ms
+  |- (My CN) MxM: 2251.572580 ms
+    |- (MxM-Like) Partition - 0.005269 ms
+    |- (MxM-Like) MxM - 984.147303 ms
+    |- (MxM-Like) Merge - 53.076890 ms
+  |- (My CN) MxM: 1037.329776 ms
+Enumeration: 18227.774034 ms
+</entry>
+<entry>
+Mask and Selector Generation: 4758.940436 ms
+    |- (MxM-Like) Partition - 0.006906 ms
+    |- (MxM-Like) MxM - 1722.552208 ms
+    |- (MxM-Like) Merge - 437.842401 ms
+  |- (My CN) MxM: 2160.514062 ms
+Enumeration: 7734.001539 ms
+Mask and Selector Generation: 6860.366883 ms
+    |- (MxM-Like) Partition - 0.005783 ms
+    |- (MxM-Like) MxM - 3850.193645 ms
+    |- (MxM-Like) Merge - 1709.139281 ms
+  |- (My CN) MxM: 5559.421607 ms
+    |- (MxM-Like) Partition - 0.006053 ms
+    |- (MxM-Like) MxM - 5472.145566 ms
+    |- (MxM-Like) Merge - 175.574442 ms
+  |- (My CN) MxM: 5647.804612 ms
+Enumeration: 26965.293511 ms
+Mask and Selector Generation: 3428.909047 ms
+    |- (MxM-Like) Partition - 0.004830 ms
+    |- (MxM-Like) MxM - 2589.880016 ms
+    |- (MxM-Like) Merge - 865.751490 ms
+  |- (My CN) MxM: 3455.718612 ms
+    |- (MxM-Like) Partition - 0.008592 ms
+    |- (MxM-Like) MxM - 3089.103829 ms
+    |- (MxM-Like) Merge - 122.530840 ms
+  |- (My CN) MxM: 3211.721253 ms
+    |- (MxM-Like) Partition - 0.004979 ms
+    |- (MxM-Like) MxM - 968.807612 ms
+    |- (MxM-Like) Merge - 49.808899 ms
+  |- (My CN) MxM: 1018.694982 ms
+Enumeration: 18935.703229 ms
+</entry>

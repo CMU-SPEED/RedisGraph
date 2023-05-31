@@ -126,11 +126,9 @@ void _traverse(OpCondTraverse *op) {
     {
         GrB_mxm(op->M->matrix, (*(op->prev_gbR))->matrix, GrB_NULL,
                 GrB_LAND_LOR_SEMIRING_BOOL, S[0], A, GrB_DESC_RC);
-        // GrB_Matrix_free(&(S[0]));
         for (size_t i = 1; i < nV; i++) {
             GrB_mxm(op->M->matrix, op->M->matrix, GrB_NULL,
                     GrB_LAND_LOR_SEMIRING_BOOL, S[i], A, GrB_DESC_R);
-            // GrB_Matrix_free(&(S[i]));
         }
     }
     result = simple_toc(tic);

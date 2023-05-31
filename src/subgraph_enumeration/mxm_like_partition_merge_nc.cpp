@@ -21,11 +21,11 @@ extern "C" void mxv_like_v3(std::vector<size_t> *Ic, size_t *Im, size_t Im_size,
                             size_t *IA, size_t IA_size, size_t *JA,
                             size_t JA_size, size_t *Ib, size_t Ib_size);
 
-extern "C" void masked_extract_row(std::vector<size_t> &Ic, size_t *Im, size_t Im_size,
+extern "C" void masked_extract_row_nc(std::vector<size_t> &Ic, size_t *Im, size_t Im_size,
                             size_t *IA, size_t IA_size, size_t *JA,
                             size_t JA_size, size_t *Ib, size_t Ib_size);
 
-extern "C" void mxm_like_partition_merge(
+extern "C" void mxm_like_partition_merge_nc(
     std::vector<size_t> &IC, std::vector<size_t> &JC, std::vector<size_t> &IM,
     std::vector<size_t> &JM, std::vector<size_t> &IA, std::vector<size_t> &JA,
     std::vector<size_t> &IB, std::vector<size_t> &JB) {
@@ -94,7 +94,7 @@ extern "C" void mxm_like_partition_merge(
             size_t B_size = IB_arr[ib + 1] - IB_arr[ib];
 
             if (B_size == 1) {
-                masked_extract_row(*(partitioned_JC[partition]), M_st, M_size, IA_arr,
+                masked_extract_row_nc(*(partitioned_JC[partition]), M_st, M_size, IA_arr,
                             IA_size, JA_arr, JA_size, B_st, B_size);
             } else {
                 // Type A - CN then copy

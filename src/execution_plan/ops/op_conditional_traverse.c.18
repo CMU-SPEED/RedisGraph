@@ -81,7 +81,7 @@ void _traverse(OpCondTraverse *op) {
         }
     }
 
-    GrB_Matrix S, A;
+    GrB_Matrix S[nV], A;
     GrB_Index M_nrows, M_ncols;
 
     simple_tic(tic);
@@ -92,7 +92,9 @@ void _traverse(OpCondTraverse *op) {
         GrB_Matrix_resize(A, M_ncols, M_ncols);
         GrB_Matrix_resize(op->M->matrix, M_nrows, M_ncols);
 
-        GrB_Matrix_new(&S, GrB_BOOL, M_nrows, M_ncols);
+        for (size_t j = 0; j < nV; j++) {
+            GrB_Matrix_new(&(S[j]), GrB_BOOL, M_nrows, M_ncols);
+        }
 
         RG_MatrixTupleIter_attach(&op->iter, *(op->prev_gbR));
 
@@ -111,7 +113,8 @@ void _traverse(OpCondTraverse *op) {
 
             // Check the plan to generate S
             if (QPLAN[QPLAN_ID][op->destNodeIdx][value - 1]) {
-                info = GrB_Matrix_setElement_BOOL(S, true, src_id, dest_id);
+                info = GrB_Matrix_setElement_BOOL(S[value - 1], true, src_id,
+                                                  dest_id);
                 assert(info == GrB_SUCCESS);
             }
         }
@@ -121,13 +124,17 @@ void _traverse(OpCondTraverse *op) {
 
     simple_tic(tic);
     {
-        _gb_mxm_like_partition_merge(&(op->M->matrix),
-                                     &((*(op->prev_gbR))->matrix), &S, &A);
+        _gb_mxm_like_partition_merge(&(op->M->matrix), &((*(op->prev_gbR))->matrix), &(S[0]), &A);
+        for (size_t i = 1; i < nV; i++) {
+            _gb_mxm_like_partition_merge_nc(&(op->M->matrix), &(op->M->matrix), &(S[i]), &A);
+        }
     }
     result = simple_toc(tic);
     printf("Enumeration: %f ms\n", result * 1e3);
 
-    GrB_Matrix_free(&S);
+    for (size_t i = 0; i < nV; i++) {
+        GrB_Matrix_free(&(S[i]));
+    }
 
     RG_MatrixTupleIter_attach(&op->iter, op->M);
     RG_MatrixTupleIter_attach(&op->iter_R, *(op->prev_gbR));

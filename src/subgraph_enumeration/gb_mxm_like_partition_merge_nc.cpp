@@ -14,17 +14,12 @@ extern "C" {
 #include "../util/simple_timer.h"
 }
 
-extern "C" void mxm_like_partition_merge(
+extern "C" void mxm_like_partition_merge_nc(
     std::vector<size_t> &IC, std::vector<size_t> &JC, std::vector<size_t> &IM,
     std::vector<size_t> &JM, std::vector<size_t> &IA, std::vector<size_t> &JA,
     std::vector<size_t> &IB, std::vector<size_t> &JB);
 
-extern "C" void mxm_like_partition_merge_indexless(
-    std::vector<uint64_t> &IC, std::vector<uint64_t> &JC, uint64_t M_size,
-    std::vector<uint64_t> &JM, std::vector<uint64_t> &IA,
-    std::vector<uint64_t> &JA, uint64_t B_size, std::vector<uint64_t> &JB);
-
-extern "C" void gb_mxm_like_partition_merge(GrB_Matrix &C, GrB_Matrix &M,
+extern "C" void gb_mxm_like_partition_merge_nc(GrB_Matrix &C, GrB_Matrix &M,
                                             GrB_Matrix &A, GrB_Matrix &B) {
     GrB_Info info;
 
@@ -110,7 +105,7 @@ extern "C" void gb_mxm_like_partition_merge(GrB_Matrix &C, GrB_Matrix &M,
     double tic[2];
 
     simple_tic(tic);
-    { mxm_like_partition_merge(IC, JC, IM, JM, IB, JB, IA, JA); }
+    { mxm_like_partition_merge_nc(IC, JC, IM, JM, IB, JB, IA, JA); }
     result = simple_toc(tic);
     printf("  |- (My CN) MxM: %f ms\n", result * 1e3);
 
@@ -128,7 +123,7 @@ extern "C" void gb_mxm_like_partition_merge(GrB_Matrix &C, GrB_Matrix &M,
     assert(info == GrB_SUCCESS);
 }
 
-extern "C" void _gb_mxm_like_partition_merge(GrB_Matrix *C, GrB_Matrix *M,
+extern "C" void _gb_mxm_like_partition_merge_nc(GrB_Matrix *C, GrB_Matrix *M,
                                              GrB_Matrix *A, GrB_Matrix *B) {
-    gb_mxm_like_partition_merge(*C, *M, *A, *B);
+    gb_mxm_like_partition_merge_nc(*C, *M, *A, *B);
 }
