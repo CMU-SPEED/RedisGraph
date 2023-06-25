@@ -20,6 +20,11 @@ extern "C" void mxv_like_v2(std::vector<size_t> &Ic, size_t *Im, size_t Im_size,
                             size_t *IA, size_t IA_size, size_t *JA,
                             size_t JA_size, size_t *Ib, size_t Ib_size);
 
+extern "C" void masked_extract_row(std::vector<size_t> &Ic, size_t *Im,
+                                   size_t Im_size, size_t *IA, size_t IA_size,
+                                   size_t *JA, size_t JA_size, size_t *Ib,
+                                   size_t Ib_size);
+
 extern "C" void mxm_like_partition_no_conv(
     size_t ***IC, size_t **IC_size, size_t ***JC, size_t **JC_size, size_t *IM,
     size_t IM_size, size_t *JM, size_t JM_size, size_t *IB, size_t IB_size,
@@ -86,33 +91,55 @@ extern "C" void mxm_like_partition_no_conv(
         size_t current_C_size = 0;
         for (size_t ib = partition_offset[partition];
              ib < partition_offset[partition + 1]; ib++) {
-            // simple_tic(inner_tic);
-            std::vector<size_t> tmp_C;
-
-            size_t *M_st = NULL, M_size = 0;
-            if (IM_size != 0) {
-                M_st = JM_arr + IM_arr[ib];
-                M_size = IM_arr[ib + 1] - IM_arr[ib];
-            }
-
+            size_t *M_st = JM_arr + IM_arr[ib];
+            size_t M_size = IM_arr[ib + 1] - IM_arr[ib];
             size_t *B_st = JB_arr + IB_arr[ib];
             size_t B_size = IB_arr[ib + 1] - IB_arr[ib];
 
-            // Copy and Sorted
-            if (IM_size > 1) {
-                std::vector<size_t> M_sorted(M_st, M_st + M_size);
-                std::sort(std::begin(M_sorted), std::end(M_sorted));
-                M_st = M_sorted.data();
+            if (B_size == 1) {
+                masked_extract_row(*(partitioned_JC[partition]), M_st, M_size,
+                                   IA_arr, IA_size, JA_arr, JA_size, B_st,
+                                   B_size);
+            } else {
+                // Type A - CN then copy
+                std::vector<size_t> tmp_C;
+                mxv_like_v2(tmp_C, M_st, M_size, IA_arr, IA_size, JA_arr,
+                            JA_size, B_st, B_size);
+                partitioned_JC[partition]->insert(
+                    partitioned_JC[partition]->end(), tmp_C.begin(),
+                    tmp_C.end());
             }
 
-            mxv_like_v1(tmp_C, M_st, M_size, IA_arr,
-                        IA_size, JA_arr, JA_size, B_st, B_size);
+            partitioned_IC[partition]->push_back(
+                partitioned_JC[partition]->size());
 
-            partitioned_JC[partition]->insert(partitioned_JC[partition]->end(),
-                                              tmp_C.begin(), tmp_C.end());
+            // // simple_tic(inner_tic);
+            // std::vector<size_t> tmp_C;
 
-            current_C_size += tmp_C.size();
-            partitioned_IC[partition]->push_back(current_C_size);
+            // size_t *M_st = NULL, M_size = 0;
+            // if (IM_size != 0) {
+            //     M_st = JM_arr + IM_arr[ib];
+            //     M_size = IM_arr[ib + 1] - IM_arr[ib];
+            // }
+
+            // size_t *B_st = JB_arr + IB_arr[ib];
+            // size_t B_size = IB_arr[ib + 1] - IB_arr[ib];
+
+            // // Copy and Sorted
+            // if (IM_size > 1) {
+            //     std::vector<size_t> M_sorted(M_st, M_st + M_size);
+            //     std::sort(std::begin(M_sorted), std::end(M_sorted));
+            //     M_st = M_sorted.data();
+            // }
+
+            // mxv_like_v1(tmp_C, M_st, M_size, IA_arr,
+            //             IA_size, JA_arr, JA_size, B_st, B_size);
+
+            // partitioned_JC[partition]->insert(partitioned_JC[partition]->end(),
+            //                                   tmp_C.begin(), tmp_C.end());
+
+            // current_C_size += tmp_C.size();
+            // partitioned_IC[partition]->push_back(current_C_size);
 
             // inner_result += simple_toc(inner_tic);
         }
